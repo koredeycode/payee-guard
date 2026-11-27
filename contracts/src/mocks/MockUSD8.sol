@@ -91,8 +91,9 @@ contract MockUSD8 is ERC20, EIP712 {
         if (block.timestamp <= validAfter) revert AuthorizationNotYetValid();
         if (block.timestamp >= validBefore) revert AuthorizationExpired();
         if (authorizationState[from][nonce]) revert AuthorizationUsedAlready();
-        bytes32 digest =
-            _hashTypedDataV4(keccak256(abi.encode(typehash, from, to, value, validAfter, validBefore, nonce)));
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(abi.encode(typehash, from, to, value, validAfter, validBefore, nonce))
+        );
         if (ECDSA.recover(digest, v, r, s) != from) revert InvalidSignature();
         authorizationState[from][nonce] = true;
         emit AuthorizationUsed(from, nonce);

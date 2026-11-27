@@ -74,9 +74,10 @@ contract Checkout {
         bytes32 s
     ) external {
         _record(orderId, from, amount);
-        IERC3009(address(token)).receiveWithAuthorization(
-            from, address(this), amount, validAfter, validBefore, authorizationNonce(orderId), v, r, s
-        );
+        IERC3009(address(token))
+            .receiveWithAuthorization(
+                from, address(this), amount, validAfter, validBefore, authorizationNonce(orderId), v, r, s
+            );
         token.safeTransfer(merchant, amount);
     }
 
