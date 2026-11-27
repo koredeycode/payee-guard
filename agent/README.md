@@ -102,8 +102,8 @@ Tools:
 | `LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL` | Optional real-model configuration; used by the worker only |
 | `RPC_URL`, `CHAIN_ID` | Default `https://rpc-test.qday.info`, `44005` (use `440050` for a local fork) |
 | `PAYEE_REGISTRY_ADDRESS` | Deployed `IdentityRegistry` (`getAgentWallet(uint256)`) |
-| `PAYMENT_CONTRACT_ADDRESS` | Deployed `PayeeGuard` (`payees`, `sessions`, `intents`, proposal/execution functions and events) |
-| `SESSION_KEY_ADDRESS` | Public address of the agent session key used by `sessions(address)`; missing session fails closed |
+| `PAYMENT_CONTRACT_ADDRESS` | Deployed `PayeeGuard` (`payees`, `sessionOf`, `intents`, proposal/execution functions and events) |
+| `AGENT_OPERATOR_ADDRESS` | Public address of the agent operator, paired with the uint256 agentId in `sessionOf(agentId, operator)`; missing session fails closed |
 | `OWNER_PRIVATE_KEY` | Only read to sign `approveIntent` for an intent listed in `OWNER_APPROVED_INTENTS` |
 | `AGENT_PRIVATE_KEY` | Gas-only key; read only to sign `proposeIntent` / `tryExecuteIntent` |
 | `OWNER_APPROVED_INTENTS` | Comma-separated intent ids the owner approved out of band; otherwise `REQUIRES_OWNER_APPROVAL` intents are never executed |
@@ -134,10 +134,8 @@ function getAgentWallet(uint256 agentId) external view returns (address wallet);
 
 function payees(uint256 agentId) external view returns (
     address wallet, bytes32 nameHash, bytes32 metadataHash, bool allowed);
-function sessions(address key) external view returns (
-    uint256 maxPerPayment, uint256 maxCumulative, uint256 spent,
-    uint256 autoApproveLimit, uint64 validAfter, uint64 expiresAt,
-    uint64 epoch, bool revoked);
+function sessionKey(uint256 agentId, address operator) external pure returns (bytes32 key);
+function sessionOf(uint256 agentId, address operator) external view returns (Session memory);
 function intents(bytes32 intentId) external view returns (
     uint256 agentId, address payee, uint256 amount, bytes32 nameHash,
     bytes32 metadataHash, uint64 expiresAt, address createdBy,
@@ -148,14 +146,21 @@ function approveIntent(bytes32 intentId) external;
 function executeIntent(bytes32 intentId) external;
 function tryExecuteIntent(bytes32 intentId) external returns (bool);
 
-event IntentProposed(bytes32 indexed intentId, uint256 indexed agentId, ...);
-event PaymentSent(bytes32 indexed intentId, uint256 indexed agentId, address payee, uint256 amount);
+event IntentProposed(
+    bytes32 indexed intentId, uint256 indexed agentId, address indexed payee,
+    uint256 amount, bytes32 nameHash, bytes32 metadataHash, uint64 expiresAt,
+    address createdBy, uint64 sessionEpoch, bool approved);
+event PaymentSent(
+    bytes32 indexed intentId, bytes32 indexed paymentRef, uint256 indexed agentId,
+    address payee, uint256 amount, address caller);
 event PaymentRejected(bytes32 indexed intentId, address indexed caller, bytes32 reason);
 ```
 
-The proposal receipt is parsed for `IntentProposed` to obtain the on-chain `intentId`;
-`PaymentSent` is the receipt and `PaymentRejected` explains a failed execution. There is
-no `isAllowed(address)` or `PaymentExecuted` event in the product contracts.
+The exact event signatures above are used as topic0: the proposal receipt is parsed for
+`IntentProposed` to obtain the on-chain `intentId`; `PaymentSent` is the receipt and
+`PaymentRejected` explains a failed execution. Sessions are keyed by
+`sessionKey(agentId, operator)`, never by a bare address. There is no `isAllowed(address)`
+or `PaymentExecuted` event in the product contracts.
 
 Name comparison uses `lib/verdict.ts`: Unicode NFKC, casefold, invisibles stripped and
 whitespace collapsed for *comparison*; `nameHash` is byte-exact

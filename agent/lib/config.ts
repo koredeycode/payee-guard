@@ -13,8 +13,8 @@ export interface AgentConfig {
   registryAddress?: Address;
   /** PayeeGuard: payees, sessions, intents, proposeIntent, executeIntent, events. */
   paymentAddress?: Address;
-  /** Public address of the agent session key used by sessions(address). Not a secret. */
-  sessionKeyAddress?: Address;
+  /** Public address of the agent operator used with sessionOf(agentId, operator). Not a secret. */
+  agentOperatorAddress?: Address;
   agentId: string;
   tracePath: string;
   fixtureName: string;
@@ -38,7 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     chainId: Number(env.CHAIN_ID ?? "44005"),
     registryAddress: optionalAddress(env.PAYEE_REGISTRY_ADDRESS),
     paymentAddress: optionalAddress(env.PAYMENT_CONTRACT_ADDRESS),
-    sessionKeyAddress: optionalAddress(env.SESSION_KEY_ADDRESS),
+    agentOperatorAddress: optionalAddress(env.AGENT_OPERATOR_ADDRESS),
     agentId: env.AGENT_ID ?? "payee-guard-worker",
     tracePath: env.TRACE_PATH ?? fileURLToPath(new URL("../trace.jsonl", import.meta.url)),
     fixtureName: env.FIXTURE ?? "legit",

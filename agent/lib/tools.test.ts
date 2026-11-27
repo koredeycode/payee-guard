@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { keccak256, stringToHex, type Hex, type TransactionReceipt } from "viem";
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  parseAbi,
+  toEventSelector,
+  type Hex,
+  type TransactionReceipt,
+} from "viem";
 import { loadConfig } from "./config.js";
 import { createPaymentTools, intentIdFromReceipt } from "./tools.js";
 
@@ -46,22 +53,32 @@ test("an approved intent executes in demo mode and leaves a receipt", async () =
   assert.equal((await tools.getReceipts()).count, 1);
 });
 
-test("intent id is parsed from the IntentProposed receipt topic", () => {
+test("intent id is parsed from the exact IntentProposed log", () => {
+  const eventSignature =
+    "event IntentProposed(bytes32 indexed intentId, uint256 indexed agentId, address indexed payee, uint256 amount, bytes32 nameHash, bytes32 metadataHash, uint64 expiresAt, address createdBy, uint64 sessionEpoch, bool approved)" as const;
+  const abi = parseAbi([eventSignature]);
   const intentId = `0x${"11".repeat(32)}` as Hex;
-  const signatures = [
-    "IntentProposed(bytes32,uint256,address,uint256,bytes32,bytes32,uint64)",
-    "IntentProposed(bytes32,uint256)",
-  ];
-  for (const signature of signatures) {
-    const logs = [
-      {
-        address: "0x2222222222222222222222222222222222222222",
-        topics: [keccak256(stringToHex(signature)), intentId],
-        data: "0x",
-      },
-    ] as unknown as TransactionReceipt["logs"];
-    assert.equal(intentIdFromReceipt(logs), intentId);
-  }
+  const payee = "0x2222222222222222222222222222222222222222" as const;
+  const topics = encodeEventTopics({
+    abi,
+    eventName: "IntentProposed",
+    args: { intentId, agentId: 7n, payee },
+  });
+  assert.equal(topics[0], toEventSelector(eventSignature));
+  const data = encodeAbiParameters(
+    [
+      { type: "uint256" },
+      { type: "bytes32" },
+      { type: "bytes32" },
+      { type: "uint64" },
+      { type: "address" },
+      { type: "uint64" },
+      { type: "bool" },
+    ],
+    [0n, `0x${"22".repeat(32)}`, `0x${"33".repeat(32)}`, 0n, payee, 1n, true],
+  );
+  const logs = [{ address: payee, topics, data }] as unknown as TransactionReceipt["logs"];
+  assert.equal(intentIdFromReceipt(logs), intentId);
   assert.equal(intentIdFromReceipt([]), undefined);
 });
 

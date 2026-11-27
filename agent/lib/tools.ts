@@ -38,42 +38,28 @@ import {
  */
 const payeeGuardAbi = parseAbi([
   "function payees(uint256 agentId) view returns (address wallet, bytes32 nameHash, bytes32 metadataHash, bool allowed)",
-  "function sessions(address key) view returns (uint256 maxPerPayment, uint256 maxCumulative, uint256 spent, uint256 autoApproveLimit, uint64 validAfter, uint64 expiresAt, uint64 epoch, bool revoked)",
+  "function sessionKey(uint256 agentId, address operator) pure returns (bytes32 key)",
+  "function sessionOf(uint256 agentId, address operator) view returns ((uint256 maxPerPayment, uint256 maxCumulative, uint256 spent, uint256 autoApproveLimit, uint64 validAfter, uint64 expiresAt, uint64 epoch, bool revoked))",
+  "function sessions(bytes32 key) view returns ((uint256 maxPerPayment, uint256 maxCumulative, uint256 spent, uint256 autoApproveLimit, uint64 validAfter, uint64 expiresAt, uint64 epoch, bool revoked))",
   "function intents(bytes32 intentId) view returns (uint256 agentId, address payee, uint256 amount, bytes32 nameHash, bytes32 metadataHash, uint64 expiresAt, address createdBy, uint64 sessionEpoch, bool approved, bool executed)",
   "function proposeIntent(uint256 agentId, uint256 amount, bytes32 nameHash, bytes32 metadataHash, uint64 expiresAt) returns (bytes32 intentId)",
   "function approveIntent(bytes32 intentId)",
   "function executeIntent(bytes32 intentId)",
   "function tryExecuteIntent(bytes32 intentId) returns (bool)",
-  "event IntentProposed(bytes32 indexed intentId, uint256 indexed agentId, address payee, uint256 amount, bytes32 nameHash, bytes32 metadataHash, uint64 expiresAt)",
-  "event PaymentSent(bytes32 indexed intentId, uint256 indexed agentId, address payee, uint256 amount)",
+  // Exact topic0 signatures from PayeeGuard.sol — shorter fragments never match.
+  "event IntentProposed(bytes32 indexed intentId, uint256 indexed agentId, address indexed payee, uint256 amount, bytes32 nameHash, bytes32 metadataHash, uint64 expiresAt, address createdBy, uint64 sessionEpoch, bool approved)",
+  "event PaymentSent(bytes32 indexed intentId, bytes32 indexed paymentRef, uint256 indexed agentId, address payee, uint256 amount, address caller)",
   "event PaymentRejected(bytes32 indexed intentId, address indexed caller, bytes32 reason)",
 ]);
 const identityRegistryAbi = parseAbi([
   "function getAgentWallet(uint256 agentId) view returns (address wallet)",
 ]);
 const paymentSentAbi = parseAbi([
-  "event PaymentSent(bytes32 indexed intentId, uint256 indexed agentId, address payee, uint256 amount)",
+  "event PaymentSent(bytes32 indexed intentId, bytes32 indexed paymentRef, uint256 indexed agentId, address payee, uint256 amount, address caller)",
 ]);
 const paymentRejectedAbi = parseAbi([
   "event PaymentRejected(bytes32 indexed intentId, address indexed caller, bytes32 reason)",
 ]);
-
-/**
- * `IntentProposed` always carries intentId as its first indexed parameter, but its
- * trailing (non-indexed) fields vary between contract revisions. Match the event
- * topic against known signatures and read `topics[1]`; receipts never return the
- * value of a function call.
- */
-const INTENT_PROPOSED_SIGNATURES = [
-  "IntentProposed(bytes32,uint256,address,uint256,bytes32,bytes32,uint64)",
-  "IntentProposed(bytes32,uint256,bytes32,bytes32,uint64)",
-  "IntentProposed(bytes32,uint256,address,uint256,uint64)",
-  "IntentProposed(bytes32,uint256,address,uint256)",
-  "IntentProposed(bytes32,uint256,uint256,uint64)",
-  "IntentProposed(bytes32,uint256,uint256)",
-  "IntentProposed(bytes32,uint256)",
-  "IntentProposed(bytes32)",
-] as const;
 
 export type Verdict =
   | "OK"
@@ -177,7 +163,7 @@ export interface PaymentTools {
   resolvePayee(input: ResolveInput): Promise<ResolveResult>;
   proposePayment(input: ProposalInput): Promise<ProposalResult>;
   executePayment(input: { intentId: string }): Promise<ExecutionResult>;
-  getPolicy(): Promise<Policy>;
+  getPolicy(agentId?: string): Promise<Policy>;
   getReceipts(): Promise<{ mode: "demo" | "live"; count: number; receipts: Receipt[]; note?: string }>;
 }
 
@@ -235,22 +221,18 @@ function decodeRejectReason(reason: Hex | undefined): string {
 
 /** The proposal receipt is the only place the on-chain intent id is available. */
 export function intentIdFromReceipt(logs: TransactionReceipt["logs"]): Hex | undefined {
-  const intentEvents = payeeGuardAbi.filter(
-    (fragment) => fragment.type === "event" && fragment.name === "IntentProposed",
-  );
   try {
-    const parsed = parseEventLogs({ abi: intentEvents, logs });
-    const intentId = parsed.find((entry) => entry.args.intentId !== undefined)?.args.intentId;
-    if (intentId) return intentId as Hex;
+    // Exact topic0: viem only matches logs emitted with the PayeeGuard.sol signature.
+    const parsed = parseEventLogs({
+      abi: payeeGuardAbi,
+      eventName: "IntentProposed",
+      logs,
+    }) as unknown as Array<{ args: { intentId?: Hex } }>;
+    const intentId = parsed[0]?.args.intentId;
+    return intentId ? (intentId as Hex) : undefined;
   } catch {
-    // Fall back to topic matching below if a non-indexed field differs.
+    return undefined;
   }
-  for (const signature of INTENT_PROPOSED_SIGNATURES) {
-    const topic = keccak256(stringToHex(signature));
-    const log = logs.find((entry) => entry.topics[0] === topic && entry.topics[1] !== undefined);
-    if (log) return log.topics[1] as Hex;
-  }
-  return undefined;
 }
 
 /** On chain we only have hashes; show that honestly instead of claiming a name match. */
@@ -317,14 +299,15 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
     };
   }
 
-  async function readLiveSession() {
-    if (!config.paymentAddress || !config.sessionKeyAddress) return undefined;
+  /** Sessions are keyed by (uint256 agentId, operator); epoch 0 means none exists. */
+  async function readLiveSession(agentId: bigint) {
+    if (!config.paymentAddress || !config.agentOperatorAddress) return undefined;
     try {
-      return (await publicClientFor(config).readContract({
+      const session = (await publicClientFor(config).readContract({
         address: config.paymentAddress,
         abi: payeeGuardAbi,
-        functionName: "sessions",
-        args: [config.sessionKeyAddress],
+        functionName: "sessionOf",
+        args: [agentId, config.agentOperatorAddress],
       })) as unknown as {
         maxPerPayment: bigint;
         maxCumulative: bigint;
@@ -335,6 +318,7 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
         epoch: bigint;
         revoked: boolean;
       };
+      return session.epoch === 0n ? undefined : session;
     } catch {
       return undefined;
     }
@@ -537,9 +521,9 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
     };
   }
 
-  async function getPolicy(): Promise<Policy> {
+  async function getPolicy(agentIdInput?: string): Promise<Policy> {
     if (config.demo) return { ...demoPolicy(), source: "fixtures/policy.json" };
-    // Live limits come from PayeeGuard.sessions(address), never from a fixture.
+    // Live limits come from PayeeGuard.sessionOf(agentId, operator), never from a fixture.
     const failClosed: Policy = {
       version: "fail-closed",
       chainId: config.chainId,
@@ -549,11 +533,13 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
       maxAutoApprove: "0",
       requireAllowlist: true,
       rejectPromptInjection: true,
-      source: "default (session key / payment contract missing or unreadable)",
+      source: "default (no session for agentId/operator or payment contract missing)",
       maxPerPayment: "0",
       sessionRevoked: true,
     };
-    const session = await readLiveSession();
+    const agentId = parseAgentId(agentIdInput);
+    if (agentId === undefined) return failClosed;
+    const session = await readLiveSession(agentId);
     if (!session) return failClosed;
     const now = BigInt(Math.floor(Date.now() / 1000));
     const active =
@@ -565,7 +551,7 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
       sessionExpiresAt: Number(session.expiresAt),
       sessionEpoch: Number(session.epoch),
       sessionRevoked: !active,
-      source: `chain:${config.paymentAddress}.sessions(${config.sessionKeyAddress})`,
+      source: `chain:${config.paymentAddress}.sessionOf(${agentId}, ${config.agentOperatorAddress})`,
     };
   }
 
@@ -580,12 +566,12 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
     const id = parseAgentId(agentId);
     if (id === undefined || !config.paymentAddress) return "NOT_ALLOWLISTED";
     try {
-      const payee = await publicClientFor(config).readContract({
+      const payee = (await publicClientFor(config).readContract({
         address: config.paymentAddress,
         abi: payeeGuardAbi,
         functionName: "payees",
         args: [id],
-      });
+      })) as unknown as readonly [Address, Hex, Hex, boolean];
       return payee[3] ? "ALLOWLISTED" : "NOT_ALLOWLISTED";
     } catch {
       return "NOT_ALLOWLISTED";
@@ -626,7 +612,7 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
   }
 
   async function proposePayment(input: ProposalInput): Promise<ProposalResult> {
-    const policy = await getPolicy();
+    const policy = await getPolicy(input.agentId);
     const rejection = (
       verdict: ProposalResult["verdict"],
       reason: string,
@@ -790,19 +776,21 @@ export function createPaymentTools(config: AgentConfig): PaymentTools {
             abi: payeeGuardAbi,
             functionName: "payees",
             args: [agentId],
-          }),
+          }) as Promise<readonly [Address, Hex, Hex, boolean]>,
           client.readContract({
             address: config.registryAddress,
             abi: identityRegistryAbi,
             functionName: "getAgentWallet",
             args: [agentId],
-          }),
+          }) as Promise<Address>,
           client.readContract({
             address: config.paymentAddress,
             abi: payeeGuardAbi,
             functionName: "intents",
             args: [intentId],
-          }),
+          }) as Promise<
+            readonly [bigint, Address, bigint, Hex, Hex, bigint, Address, bigint, boolean, boolean]
+          >,
         ]);
         const [payeeWallet, , , payeeAllowed] = payee;
         const [onChainAgentId, onChainPayee, , , , , , , onChainApproved, onChainExecuted] = onChainIntent;

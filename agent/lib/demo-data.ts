@@ -26,7 +26,7 @@ export interface Policy {
   requireAllowlist: boolean;
   rejectPromptInjection: boolean;
   source: string;
-  /** Live-only session limits from PayeeGuard.sessions(address); absent in demo mode. */
+  /** Live-only limits from PayeeGuard.sessionOf(agentId, operator); absent in demo mode. */
   maxPerPayment?: string;
   sessionExpiresAt?: number;
   sessionEpoch?: number;
