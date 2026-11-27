@@ -167,7 +167,6 @@ export async function runSeed(): Promise<void> {
       const block = await ctx.client.getBlock();
       const deadline = BigInt(block.timestamp) + 240n;
       const signature = await walletSigner.wallet.signTypedData({
-        account: walletSigner.address,
         domain: {
           name: "ERC8004IdentityRegistry",
           version: "1",

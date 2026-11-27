@@ -279,9 +279,9 @@ export async function runDemo(): Promise<void> {
     console.log(`  ${ok ? "✓" : "✗"} ${scenario.id}: ${scenario.result.event} — ${scenario.result.reason}${matchesReason ? "" : ` (expected ${scenario.expectedReason})`}`);
   }
 
-  const amount = parseUnits("10", 6);
+  const amount = parseUnits(env("PAYMENT_AMOUNT") ?? "10", 6);
   const overCap = perCap + 1n;
-  const aboveAuto = autoApprove + parseUnits("5", 6);
+  const aboveAuto = autoApprove + parseUnits(env("ABOVE_AUTO_DELTA") ?? "5", 6);
 
   // 01 — normal payment: intent inherits the allowlisted payee, no address from the caller.
   const first = await propose(ctx, agent, legit.agentId, amount, legitHashes, "01 legit");
@@ -373,7 +373,6 @@ export async function runDemo(): Promise<void> {
   const rotationBlock = await ctx.client.getBlock();
   const deadline = BigInt(rotationBlock.timestamp) + 240n; // registry allows at most 5 minutes
   const signature = await newWalletSigner.wallet.signTypedData({
-    account: newWalletSigner.address,
     domain: {
       name: "ERC8004IdentityRegistry", version: "1", chainId: Number(ctx.chain.id), verifyingContract: registry,
     },
