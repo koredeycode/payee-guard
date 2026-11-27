@@ -313,8 +313,8 @@ export function ConsoleView() {
 
   function submitWithdraw(event: FormEvent) {
     event.preventDefault();
-    if (!withdrawAddress) {
-      say("bad", "Enter a valid destination address.");
+    if (withdrawTo.trim() && !withdrawAddress) {
+      say("bad", "Enter a valid destination address, or leave it empty to withdraw to the owner.");
       return;
     }
     let amount: bigint;
@@ -330,8 +330,8 @@ export function ConsoleView() {
         writeContractAsync({
           address: guardAddress!,
           abi: payeeGuardAbi,
-          functionName: "withdraw",
-          args: [withdrawAddress, amount],
+          functionName: withdrawAddress ? "withdrawTo" : "withdraw",
+          args: withdrawAddress ? [withdrawAddress, amount] : [amount],
         }),
     );
   }
