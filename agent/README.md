@@ -101,48 +101,61 @@ Tools:
 | `LLM_PROVIDER` | `mock` (default, offline) or `openai-compatible` |
 | `LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL` | Optional real-model configuration; used by the worker only |
 | `RPC_URL`, `CHAIN_ID` | Default `https://rpc-test.qday.info`, `44005` (use `440050` for a local fork) |
-| `PAYEE_REGISTRY_ADDRESS` | Our identity registry; see ABI below |
-| `PAYEE_POLICY_ADDRESS` | Allowlist / auto-approval policy contract |
-| `PAYMENT_CONTRACT_ADDRESS` | Policy-gated payment contract that emits receipts |
-| `OWNER_PRIVATE_KEY` | Only read when the owner has listed the exact intent id in `OWNER_APPROVED_INTENTS` |
-| `AGENT_PRIVATE_KEY` | Only read for auto-approved live execution |
+| `PAYEE_REGISTRY_ADDRESS` | Deployed `IdentityRegistry` (`getAgentWallet(uint256)`) |
+| `PAYMENT_CONTRACT_ADDRESS` | Deployed `PayeeGuard` (`payees`, `sessions`, `intents`, proposal/execution functions and events) |
+| `SESSION_KEY_ADDRESS` | Public address of the agent session key used by `sessions(address)`; missing session fails closed |
+| `OWNER_PRIVATE_KEY` | Only read to sign `approveIntent` for an intent listed in `OWNER_APPROVED_INTENTS` |
+| `AGENT_PRIVATE_KEY` | Gas-only key; read only to sign `proposeIntent` / `tryExecuteIntent` |
 | `OWNER_APPROVED_INTENTS` | Comma-separated intent ids the owner approved out of band; otherwise `REQUIRES_OWNER_APPROVAL` intents are never executed |
 | `AGENT_ID`, `FIXTURE`, `TRACE_PATH` | Worker defaults: `payee-guard-worker`, `legit`, `agent/trace.jsonl` |
 
 ### Key hygiene
 
 The **agent key holds only tQDAY for gas — never tUSD8**. The token stay with the owner /
-payment contract, and the agent can only call `executeIntent` on an approved intent.
+payment contract, and the agent can only call `tryExecuteIntent` on an approved intent.
 Keys are read from the environment at the moment a transaction is needed (never at
 startup), are never stored in config, results, traces or logs, and are never sent to an
 LLM. An intent with `REQUIRES_OWNER_APPROVAL` is stopped unless the owner explicitly puts
-its id in `OWNER_APPROVED_INTENTS`; even then only the owner key is read, and an MCP client
-cannot approve its own intent. Demo mode never reads either key. Use throwaway test wallets
-only.
+its id in `OWNER_APPROVED_INTENTS`; even then the owner key only signs `approveIntent`, and
+an MCP client cannot approve its own intent. Demo mode never reads either key. Use
+throwaway test wallets only.
 
 ## Live mode contract interface
 
-The contracts are owned by the contracts slice of this project; the agent expects these
-functions (configured by the three address variables above). Without them the tools fail
-closed: `resolve_payee` returns `UNKNOWN` and the allowlist returns `NOT_ALLOWLISTED`.
+Live mode uses **uint256 agent ids** and the real `IdentityRegistry` / `PayeeGuard`
+contracts. The payee is derived only from `payees(agentId).wallet` and must still equal
+`getAgentWallet(agentId)` at execution time (`PAYEE_CHANGED` otherwise). See
+[`ABI-NOTES.md`](ABI-NOTES.md) for the full mapping from demo fields to contract calls.
+Without the addresses above the tools fail closed: `resolve_payee` returns `UNKNOWN` and
+the allowlist returns `NOT_ALLOWLISTED`.
 
 ```solidity
-// registry
-function agentIds() external view returns (string[] memory);
-function resolveByAgentId(string calldata agentId) external view returns (
-    address payeeAddress, string memory name, bool active,
-    uint8 trustTier, string memory identityType, string[] memory services);
-// trustTier: 0 unverified, 1 provisional, 2 verified
+function getAgentWallet(uint256 agentId) external view returns (address wallet); // IdentityRegistry
 
-// policy
-function isAllowed(address payee) external view returns (bool);
-function maxAutoApprove() external view returns (uint256); // tUSD8 smallest units
-function requiredTier() external view returns (uint8);
+function payees(uint256 agentId) external view returns (
+    address wallet, bytes32 nameHash, bytes32 metadataHash, bool allowed);
+function sessions(address key) external view returns (
+    uint256 maxPerPayment, uint256 maxCumulative, uint256 spent,
+    uint256 autoApproveLimit, uint64 validAfter, uint64 expiresAt,
+    uint64 epoch, bool revoked);
+function intents(bytes32 intentId) external view returns (
+    uint256 agentId, address payee, uint256 amount, bytes32 nameHash,
+    bytes32 metadataHash, uint64 expiresAt, address createdBy,
+    uint64 sessionEpoch, bool approved, bool executed);
+function proposeIntent(uint256 agentId, uint256 amount, bytes32 nameHash,
+    bytes32 metadataHash, uint64 expiresAt) external returns (bytes32 intentId);
+function approveIntent(bytes32 intentId) external;
+function executeIntent(bytes32 intentId) external;
+function tryExecuteIntent(bytes32 intentId) external returns (bool);
 
-// payment
-function executeIntent(bytes32 intentId, address payee, uint256 amount) external;
-event PaymentExecuted(bytes32 indexed intentId, address indexed payee, uint256 amount);
+event IntentProposed(bytes32 indexed intentId, uint256 indexed agentId, ...);
+event PaymentSent(bytes32 indexed intentId, uint256 indexed agentId, address payee, uint256 amount);
+event PaymentRejected(bytes32 indexed intentId, address indexed caller, bytes32 reason);
 ```
+
+The proposal receipt is parsed for `IntentProposed` to obtain the on-chain `intentId`;
+`PaymentSent` is the receipt and `PaymentRejected` explains a failed execution. There is
+no `isAllowed(address)` or `PaymentExecuted` event in the product contracts.
 
 Name comparison uses `lib/verdict.ts`: Unicode NFKC, casefold, invisibles stripped and
 whitespace collapsed for *comparison*; `nameHash` is byte-exact

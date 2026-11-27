@@ -9,9 +9,12 @@ export interface AgentConfig {
   llmProvider: "mock" | "openai-compatible";
   rpcUrl: string;
   chainId: number;
+  /** IdentityRegistry: getAgentWallet(uint256). */
   registryAddress?: Address;
-  policyAddress?: Address;
+  /** PayeeGuard: payees, sessions, intents, proposeIntent, executeIntent, events. */
   paymentAddress?: Address;
+  /** Public address of the agent session key used by sessions(address). Not a secret. */
+  sessionKeyAddress?: Address;
   agentId: string;
   tracePath: string;
   fixtureName: string;
@@ -34,8 +37,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     rpcUrl: env.RPC_URL ?? "https://rpc-test.qday.info",
     chainId: Number(env.CHAIN_ID ?? "44005"),
     registryAddress: optionalAddress(env.PAYEE_REGISTRY_ADDRESS),
-    policyAddress: optionalAddress(env.PAYEE_POLICY_ADDRESS),
     paymentAddress: optionalAddress(env.PAYMENT_CONTRACT_ADDRESS),
+    sessionKeyAddress: optionalAddress(env.SESSION_KEY_ADDRESS),
     agentId: env.AGENT_ID ?? "payee-guard-worker",
     tracePath: env.TRACE_PATH ?? fileURLToPath(new URL("../trace.jsonl", import.meta.url)),
     fixtureName: env.FIXTURE ?? "legit",

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { keccak256, stringToHex, type Hex, type TransactionReceipt } from "viem";
 import { loadConfig } from "./config.js";
-import { createPaymentTools } from "./tools.js";
+import { createPaymentTools, intentIdFromReceipt } from "./tools.js";
 
 const demoConfig = loadConfig({});
 
@@ -43,6 +44,25 @@ test("an approved intent executes in demo mode and leaves a receipt", async () =
   assert.equal(execution.ok, true);
   assert.equal(execution.mode, "demo");
   assert.equal((await tools.getReceipts()).count, 1);
+});
+
+test("intent id is parsed from the IntentProposed receipt topic", () => {
+  const intentId = `0x${"11".repeat(32)}` as Hex;
+  const signatures = [
+    "IntentProposed(bytes32,uint256,address,uint256,bytes32,bytes32,uint64)",
+    "IntentProposed(bytes32,uint256)",
+  ];
+  for (const signature of signatures) {
+    const logs = [
+      {
+        address: "0x2222222222222222222222222222222222222222",
+        topics: [keccak256(stringToHex(signature)), intentId],
+        data: "0x",
+      },
+    ] as unknown as TransactionReceipt["logs"];
+    assert.equal(intentIdFromReceipt(logs), intentId);
+  }
+  assert.equal(intentIdFromReceipt([]), undefined);
 });
 
 test("an unknown agent fails closed", async () => {
