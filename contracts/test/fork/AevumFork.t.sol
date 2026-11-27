@@ -4,21 +4,31 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Checkout} from "../../src/Checkout.sol";
+import {IdentityRegistry} from "../../src/IdentityRegistry.sol";
+import {PayeeGuard} from "../../src/PayeeGuard.sol";
 import {Signing} from "../Signing.sol";
 
 interface ITUSD8 is IERC20 {
+    function decimals() external view returns (uint8);
+
     function DOMAIN_SEPARATOR() external view returns (bytes32);
+
     function authorizationState(address, bytes32) external view returns (bool);
 }
 
-/// @notice Runs Checkout against the REAL tUSD8 on a local fork of Aevum testnet. No funds needed:
+/// @notice Runs contracts against the REAL tUSD8 on a local fork of Aevum testnet. No funds needed:
 ///         `deal` writes a balance into the fork only.
 ///         Run with: make test-fork   (or: forge test --match-path 'test/fork/*' --fork-url aevum --evm-version shanghai)
 contract AevumForkTest is Test {
     ITUSD8 constant TUSD8 = ITUSD8(0x456569838f1d43009A91ebA4263147Afd7233483);
+    uint256 constant CHAIN_ID = 44005;
+
+    function _assertChain() internal view {
+        assertEq(block.chainid, CHAIN_ID, "run with --fork-url aevum");
+    }
 
     function test_realTusd8_domain() public view {
-        assertEq(block.chainid, 44005, "run with --fork-url aevum");
+        _assertChain();
         bytes32 expected = keccak256(
             abi.encode(
                 keccak256(
@@ -26,14 +36,20 @@ contract AevumForkTest is Test {
                 ),
                 keccak256("tUSD8"),
                 keccak256("2"),
-                uint256(44005),
+                uint256(CHAIN_ID),
                 address(TUSD8)
             )
         );
         assertEq(TUSD8.DOMAIN_SEPARATOR(), expected);
     }
 
+    function test_realTusd8_hasSixDecimals() public view {
+        _assertChain();
+        assertEq(TUSD8.decimals(), 6);
+    }
+
     function test_realTusd8_payWithAuthorization() public {
+        _assertChain();
         address merchant = makeAddr("merchant");
         (address buyer, uint256 key) = makeAddrAndKey("buyer");
         Checkout checkout = new Checkout(TUSD8, merchant);
@@ -60,6 +76,7 @@ contract AevumForkTest is Test {
     }
 
     function test_realTusd8_approveAndPay() public {
+        _assertChain();
         address merchant = makeAddr("merchant");
         address buyer = makeAddr("buyer");
         Checkout checkout = new Checkout(TUSD8, merchant);
@@ -71,5 +88,57 @@ contract AevumForkTest is Test {
         vm.stopPrank();
 
         assertEq(TUSD8.balanceOf(merchant), 3e6);
+    }
+
+    function test_payeeGuard_realTusd8_endToEnd() public {
+        _assertChain();
+        address payee = makeAddr("fork-payee");
+        address operator = makeAddr("fork-operator");
+
+        IdentityRegistry registry = new IdentityRegistry();
+        PayeeGuard guard = new PayeeGuard(TUSD8, address(this));
+        guard.setRegistry(address(registry));
+
+        vm.prank(payee);
+        uint256 agentId = registry.register("ipfs://northwind-fork");
+        bytes32 nameHash = keccak256("Northwind Trading Ltd");
+        bytes32 metaHash = keccak256("ipfs://northwind-metadata");
+        guard.allowPayee(agentId, payee, nameHash, metaHash);
+        guard.createSession(
+            agentId, operator, 20e6, 100e6, 5e6, uint64(block.timestamp), uint64(block.timestamp + 1 days)
+        );
+
+        // The test contract is the vault owner, so it funds the vault (fork-only balance write).
+        deal(address(TUSD8), address(this), 10e6); // 10 tUSD8 (6 decimals)
+        TUSD8.approve(address(guard), 5e6);
+        guard.deposit(5e6);
+
+        vm.prank(operator);
+        bytes32 intentId =
+            guard.proposeIntent(agentId, 5e6, nameHash, metaHash, uint64(block.timestamp + 1 hours));
+        vm.prank(operator);
+        guard.executeIntent(intentId);
+
+        assertEq(TUSD8.balanceOf(payee), 5e6);
+        assertEq(TUSD8.balanceOf(address(guard)), 0);
+        assertEq(guard.sessionOf(agentId, operator).spent, 5e6);
+        assertTrue(guard.intentOf(intentId).executed);
+    }
+
+    function test_payeeGuard_registryDomainUsesForkChainId() public {
+        _assertChain();
+        IdentityRegistry registry = new IdentityRegistry();
+        bytes32 expected = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256("ERC8004IdentityRegistry"),
+                keccak256("1"),
+                uint256(CHAIN_ID),
+                address(registry)
+            )
+        );
+        assertEq(registry.domainSeparator(), expected);
     }
 }
