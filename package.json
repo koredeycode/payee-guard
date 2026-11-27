@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter web dev",
-    "build": "pnpm --filter web build",
+    "build": "pnpm --filter web build && rm -rf .next && cp -r web/.next .next",
     "typecheck": "pnpm -r typecheck",
     "example": "pnpm --filter examples run",
     "check:shanghai": "node tools/check-shanghai.mjs contracts/out",
@@ -33,6 +33,7 @@
   "devDependencies": {
     "tsx": "^4.23.15",
     "viem": "^2.57.12",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "next": "16.4.3"
   }
 }
