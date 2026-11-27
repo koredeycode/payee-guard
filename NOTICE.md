@@ -32,7 +32,7 @@ UI guidance follows *unslop* by Damir Sokolovsky ([@heydamir](https://x.com/heyd
 
 | Package | Version | License | Used in |
 |---|---|---|---|
-| next | 16.4.3 | MIT | web |
+| next | 16.4.6 | MIT | web (upgraded during deployment) |
 | react, react-dom | 19.2.0 | MIT | web |
 | @rainbow-me/rainbowkit | 2.2.11 | MIT | web |
 | wagmi | 2.19.5 | MIT | web |

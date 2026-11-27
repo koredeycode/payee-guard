@@ -78,7 +78,7 @@ Not in this demo: there is no supported paymaster, and account abstraction is no
 
 ### Where is the hosted demo and the video?
 
-Hosted demo link will be added in the final README after the Vercel deploy — there is no URL yet, so that line is a deliberate placeholder. The demo video is TBD and its timestamps in [JUDGING-MAP.md](JUDGING-MAP.md) remain marked TBD rather than guessed.
+The hosted demo is live and public at https://payee-guard.vercel.app (`/`, `/demo`, `/console`, `/receipts`); it is built from current `main` with Next.js `16.4.6`, and the contracts remain deployed at commit `4fab0da…`. The read-only `/demo` verdicts still use fixture data and placeholder hashes — the real, verified receipts are in [`tx-table.json`](tx-table.json). The demo video is TBD and its timestamps in [JUDGING-MAP.md](JUDGING-MAP.md) remain marked TBD rather than guessed.
 
 ### What is the fastest way for a judge to check the claims?
 

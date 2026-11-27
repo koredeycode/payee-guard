@@ -24,7 +24,7 @@
 | IdentityRegistry | `0x0C286c822f26ecEa30aC7872AC45895a2C2614b2` |
 | tUSD8 | `0x456569838f1d43009A91ebA4263147Afd7233483` (6 decimals) |
 | 8 receipts | [`docs/tx-table.json`](tx-table.json) · [verification record](VERIFICATION.md) |
-| Hosted demo | **Placeholder** — hosted demo link will be added in the final README after the Vercel deploy |
+| Hosted demo | **Live and public:** https://payee-guard.vercel.app (`/`, `/demo`, `/console`, `/receipts`), built from current `main` with Next.js `16.4.6`; contracts remain at commit `4fab0da…` |
 | Demo video | TBD — [timestamp placeholders](JUDGING-MAP.md) |
 | Docs | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Threat model](THREAT-MODEL.md) · [FAQ](FAQ.md) · [Business](BUSINESS.md) |
 
@@ -43,8 +43,8 @@ Blocks `4296125`, `4296134`, `4296158`, `4296171`, `4296174`, `4296182` respecti
 
 ## Real vs mocked
 
-- **Real:** contracts, identities and tUSD8 transfers on Aevum `44005`; eight verified executions; a Docker demo that is a real local fork with the real tUSD8; 60 unit/fuzz/invariant + 6 fork tests; Shanghai opcode check.
-- **Mocked / advisory:** deterministic mock LLM (`LLM_PROVIDER=mock`); domain `.well-known` tier advisory and NOT active in this demo; reputation derived from `PaymentSent` events — marked stretch; registration files are data URIs; receipts are provisional (inclusion, not finality).
+- **Real:** contracts, identities and tUSD8 transfers on Aevum `44005`; eight verified executions; a Docker demo that is a real local fork with the real tUSD8; the **hosted demo at https://payee-guard.vercel.app**, built from current `main` (Next.js `16.4.6` after a deployment-time upgrade) with the contracts unchanged; 60 unit/fuzz/invariant + 6 fork tests; Shanghai opcode check.
+- **Mocked / advisory:** the read-only `/demo` scenario data is fixtures with placeholder hashes — real receipts are in [`docs/tx-table.json`](tx-table.json); deterministic mock LLM (`LLM_PROVIDER=mock`); domain `.well-known` tier advisory and NOT active in this demo; reputation derived from `PaymentSent` events — marked stretch; registration files are data URIs; receipts are provisional (inclusion, not finality).
 - **Not claimed:** no canonical ERC-8004 registry exists on Aevum 44005; no audit, no mainnet, no finality claim, no hosted URL or video yet.
 
 ## 30-second judge path

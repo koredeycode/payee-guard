@@ -8,7 +8,7 @@ Payee Guard is a tUSD8 vault on Aevum testnet (chain `44005`) that derives the p
 
 **Links**
 
-- **Hosted demo:** hosted demo link will be added in the final README (no URL is invented here).
+- **Hosted demo:** **live and public** at https://payee-guard.vercel.app — routes `/`, `/demo`, `/console` and `/receipts` are live; the app is built from current `main` (Next.js `16.4.6`), and no contracts were redeployed for it.
 - **Demo video:** TBD — not recorded at the time of writing; see [docs/JUDGING-MAP.md](docs/JUDGING-MAP.md) for the timestamp placeholders.
 - **8 verified on-chain scenarios:** [`docs/tx-table.json`](docs/tx-table.json) ([verification notes](docs/VERIFICATION.md)).
 - **Source:** https://github.com/koredeycode/payee-guard · [authoritative ABI](contracts/ABI.md) · [architecture](docs/ARCHITECTURE.md) · [threat model](docs/THREAT-MODEL.md) · [FAQ](docs/FAQ.md) · [judging map](docs/JUDGING-MAP.md) · [demo-day runbook](docs/DEMO-DAY.md).
@@ -65,7 +65,8 @@ The contract proves **Tier 0** (on-chain binding: allowlisted wallet, committed 
 |---|---|
 | Network / chain | QDay Aevum Testnet, `44005` · RPC `https://rpc-test.qday.info` · [explorer](https://explorer-test.qday.info) |
 | Deploy block | `0x418c97` (`4292247`) |
-| Deployed at commit | [`4fab0da04237ae1b543745e471132ad83c92d1be`](https://github.com/koredeycode/payee-guard/tree/4fab0da04237ae1b543745e471132ad83c92d1be) — deployed at commit `4fab0da…`; later commits (including this docs pack) were not deployed |
+| Deployed at commit | [`4fab0da04237ae1b543745e471132ad83c92d1be`](https://github.com/koredeycode/payee-guard/tree/4fab0da04237ae1b543745e471132ad83c92d1be) — contracts were deployed at commit `4fab0da…`; later commits (including this docs pack) were not deployed |
+| Hosted app | https://payee-guard.vercel.app — built from current `main` (Next.js `16.4.6` after a deployment-time upgrade); same deployed contracts above, no new contract deployment |
 | IdentityRegistry | [`0x0C286c822f26ecEa30aC7872AC45895a2C2614b2`](https://explorer-test.qday.info/address/0x0C286c822f26ecEa30aC7872AC45895a2C2614b2) · deploy [tx](https://explorer-test.qday.info/tx/0xe03b82436fe1a368be10f9094c39ac78a300c142a174a8de6de8a65d9f376728) `0xe03b8243…f376728` |
 | PayeeGuard | [`0xb0E96A17dC3677AAb535dfDB0cD37433477931ef`](https://explorer-test.qday.info/address/0xb0E96A17dC3677AAb535dfDB0cD37433477931ef) · deploy [tx](https://explorer-test.qday.info/tx/0x4b338d509cc12fb7327ea661fd1e758677a95011e8a92a50a53fc9f9b6b9b082) `0x4b338d50…b9b082` |
 | tUSD8 | [`0x456569838f1d43009A91ebA4263147Afd7233483`](https://explorer-test.qday.info/address/0x456569838f1d43009A91ebA4263147Afd7233483), 6 decimals |
@@ -100,7 +101,7 @@ All eight scenarios were executed live and verified 8/8 with `pnpm verify:submis
 | 07 | replayed intent | `PaymentRejected` / `INTENT_EXECUTED` | `4` → `0xc592…d489E` | `500000` | [`0x27ea5625…95bb59`](https://explorer-test.qday.info/tx/0x27ea562597a20dc4de526444f5664ea513a26a11f38c599e10154b58fc95bb59) |
 | 08 | rotated registry wallet | `PaymentRejected` / `PAYEE_CHANGED` | `4` → `0xc592…d489E` | `500000` | [`0xf0562ca8…629fbb5`](https://explorer-test.qday.info/tx/0xf0562ca8e9d2fd3d67031d4a26e227fa428ae1952c128e92d7163bb5d629fbb5) |
 
-Full hashes, blocks, intent IDs, confirmations and explorer URLs are in [`docs/tx-table.json`](docs/tx-table.json); the [verification record](docs/VERIFICATION.md#scenario-results) lists every field. The read-only [judge UI](web/src/app/demo/page.tsx) explains the eight verdicts with **fixture data and placeholder hashes** — it is a visual explainer, not the source of truth. The receipts above are real chain data.
+Full hashes, blocks, intent IDs, confirmations and explorer URLs are in [`docs/tx-table.json`](docs/tx-table.json); the [verification record](docs/VERIFICATION.md#scenario-results) lists every field. The [hosted demo](https://payee-guard.vercel.app) is real and public, built from current `main`; its read-only `/demo` page explains the eight verdicts using **fixture data and placeholder hashes**, so it is a visual explainer, not the source of truth. The receipts above and in [`docs/tx-table.json`](docs/tx-table.json) are the real chain data.
 
 ---
 
@@ -147,8 +148,9 @@ pnpm verify:submission       # 8/8 PASS: receipts + events checked on chain 4400
 | Payment reputation | **Derived from `PaymentSent` events — marked stretch** | [FAQ](docs/FAQ.md#is-the-reputation-score-real) |
 | LLM | **Deterministic mock** (`LLM_PROVIDER=mock`); no external model or API key | [FAQ](docs/FAQ.md#is-an-llm-actually-deciding) |
 | Docker demo | **Real local fork** of Aevum with the real tUSD8 | [demo day](docs/DEMO-DAY.md#backup-plan) |
-| Read-only judge UI | **Fixture data and placeholder hashes** in [`web/src/data/scenarios.ts`](web/src/data/scenarios.ts); it explains verdicts, it is not evidence of on-chain activity | [demo page](web/src/app/demo/page.tsx), [real receipts](docs/tx-table.json) |
-| Hosted demo / video | **TBD** — hosted demo link will be added in the final README; video not recorded | [judging map](docs/JUDGING-MAP.md) |
+| Hosted demo | **Real and public**: https://payee-guard.vercel.app (`/`, `/demo`, `/console`, `/receipts`), built from current `main` with Next.js `16.4.6`; the contracts are unchanged | [demo-day runbook](docs/DEMO-DAY.md) |
+| Read-only `/demo` scenario data | **Fixtures and placeholder hashes** in [`web/src/data/scenarios.ts`](web/src/data/scenarios.ts) — it explains verdicts, it is not evidence of on-chain activity | [hosted `/demo`](https://payee-guard.vercel.app/demo), [real receipts](docs/tx-table.json) |
+| Demo video | **TBD** — not recorded; no timestamps invented | [judging map](docs/JUDGING-MAP.md) |
 | Audit | **Not audited. Testnet only.** | [SECURITY.md](SECURITY.md), [threat model](docs/THREAT-MODEL.md) |
 
 ---
@@ -180,7 +182,7 @@ Payee Guard is a confirmation-of-payee layer that treasury teams, marketplaces a
 
 ## Roadmap
 
-1. Record the demo video and add real timestamps to the [judging map](docs/JUDGING-MAP.md); add the hosted demo link here.
+1. Record the demo video and add real timestamps to the [judging map](docs/JUDGING-MAP.md); the hosted demo is already live at https://payee-guard.vercel.app.
 2. Move `PaymentRejected` receipts past provisional inclusion to finality-aware confirmations.
 3. Replace the deterministic mock resolver with a real, bounded tool-use agent, keeping the same on-chain policy gate.
 4. Activate the domain `.well-known` tier and publish a transparent reputation methodology.

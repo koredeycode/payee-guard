@@ -9,7 +9,8 @@ Every claim below is checkable against Aevum testnet (`44005`) or this repositor
 | Item | Value |
 |---|---|
 | Repository | https://github.com/koredeycode/payee-guard (public, MIT) |
-| Deployed at commit | [`4fab0da04237ae1b543745e471132ad83c92d1be`](https://github.com/koredeycode/payee-guard/tree/4fab0da04237ae1b543745e471132ad83c92d1be) — *deployed at commit `4fab0da…`*; later commits, including this documentation pack, were not deployed |
+| Deployed at commit | [`4fab0da04237ae1b543745e471132ad83c92d1be`](https://github.com/koredeycode/payee-guard/tree/4fab0da04237ae1b543745e471132ad83c92d1be) — *contracts deployed at commit `4fab0da…`*; later commits, including this documentation pack, were not deployed to the contracts |
+| Hosted app | https://payee-guard.vercel.app (`/`, `/demo`, `/console`, `/receipts`) — built from **current `main`**, not from the deploy commit; Next.js was upgraded to `16.4.6` during deployment. No contracts were redeployed: the addresses above are unchanged. |
 | Network / chain ID | QDay Aevum Testnet / `44005` |
 | RPC / explorer | `https://rpc-test.qday.info` / https://explorer-test.qday.info |
 | Deploy block | `0x418c97` = `4292247` |
@@ -99,4 +100,4 @@ pnpm read:events           # guard logs in 1,000-block chunks (Aevum RPC limit)
 - **Registry data.** Registration files are data URIs, not IPFS/HTTP documents. The domain `.well-known` tier is advisory and **NOT active** in this demo. Reputation is derived from `PaymentSent` events — **marked stretch**.
 - **Mock LLM.** `LLM_PROVIDER=mock`, a deterministic mock. No external model or API key is involved in any of the eight scenarios.
 - **Not audited; testnet only.** The issuer can pause or blacklist tUSD8; allowlisting is the owner's trust decision; use a Safe/multisig owner on mainnet. See [THREAT-MODEL.md](THREAT-MODEL.md) and [SECURITY.md](../SECURITY.md).
-- **Hosted demo / video.** No URL is invented: hosted demo link will be added in the final README, and video timestamps remain TBD in [JUDGING-MAP.md](JUDGING-MAP.md).
+- **Hosted demo / video.** The hosted demo is live at https://payee-guard.vercel.app (`/`, `/demo`, `/console`, `/receipts`) and is built from current `main` (Next.js `16.4.6`); it does not change the contracts deployed at commit `4fab0da…`. Its read-only `/demo` verdicts are fixtures with placeholder hashes; on-chain proof is in [`docs/tx-table.json`](tx-table.json). The demo video is not recorded and its timestamps remain TBD in [JUDGING-MAP.md](JUDGING-MAP.md).

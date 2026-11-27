@@ -27,7 +27,7 @@ We will acknowledge a private report and keep you informed while we triage it. P
 - Findings that require the owner key to be malicious: the owner is trusted by design (allowlisting is the owner's trust decision).
 - tUSD8 issuer behaviour: the token can pause or blacklist, and token-level failures revert rather than producing policy reasons.
 - Lack of a canonical ERC-8004 registry on Aevum 44005, advisory domain `.well-known` checks, or the deterministic mock LLM (`LLM_PROVIDER=mock`) — these are documented limitations, not vulnerabilities. See [FAQ](docs/FAQ.md).
-- Test-only keys and demo accounts, the hosted demo (link TBD), and third-party dependencies — report those to their own maintainers.
+- Test-only keys and demo accounts, the hosted demo at https://payee-guard.vercel.app (built from current `main`; `/demo` verdicts are fixtures), and third-party dependencies — report those to their own maintainers.
 
 ## Safe handling
 

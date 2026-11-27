@@ -8,8 +8,9 @@ Official format: the top five projects present a **3–5 minute live demo** on a
 
 | What | Link |
 |---|---|
-| Demo / UI | **Placeholder** — hosted demo link will be added in the final README after the Vercel deploy |
-| Video (if recorded) | TBD — timestamps in [JUDGING-MAP.md](JUDGING-MAP.md) are TBD |
+| Demo / UI | **Live and public:** https://payee-guard.vercel.app — `/`, `/demo`, `/console` and `/receipts` return 200; the app is built from current `main` (Next.js `16.4.6`), contracts unchanged |
+| Read-only `/demo` data | Fixtures and placeholder hashes in [`../web/src/data/scenarios.ts`](../web/src/data/scenarios.ts); real receipts are in [`tx-table.json`](tx-table.json) |
+| Video (if recorded) | TBD — not recorded; timestamps in [JUDGING-MAP.md](JUDGING-MAP.md) are TBD |
 | Verified receipts | [`docs/tx-table.json`](tx-table.json) |
 | Verification record | [VERIFICATION.md](VERIFICATION.md) |
 | Architecture + sequences | [ARCHITECTURE.md](ARCHITECTURE.md) |
@@ -23,7 +24,7 @@ Official format: the top five projects present a **3–5 minute live demo** on a
 ## Preflight (15 minutes before)
 
 - [ ] `pnpm verify:submission` with `GUARD_ADDRESS`/`REGISTRY_ADDRESS` set → **8/8 PASS** (remind: provisional receipts, inclusion not finality).
-- [ ] Open the demo UI, or have `docker compose up --build` already warm as the backup (real local fork, real tUSD8, no keys).
+- [ ] Open the live demo at https://payee-guard.vercel.app (built from current `main`); remember `/demo` uses fixtures, so show real receipts from [`tx-table.json`](tx-table.json) for on-chain proof. Keep `docker compose up --build` warm as the backup (real local fork, real tUSD8, no keys).
 - [ ] Open [`docs/tx-table.json`](tx-table.json) and one explorer receipt in a second tab.
 - [ ] Confirm screen share shows the red rejection block and the diff panel legibly.
 - [ ] No keys, `.env` files or private-key text anywhere on screen or in the repo.
