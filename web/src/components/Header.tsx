@@ -3,15 +3,16 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ShieldCheck } from "lucide-react";
 import { useAccount } from "wagmi";
+import { iconProps } from "@/components/Icons";
 import { networks, repoUrl } from "@/lib/env";
-import { GitHubIcon } from "./Icons";
 import { useNetwork } from "@/lib/network";
 
 const links = [
-  { href: "/", label: "Setup" },
-  { href: "/checkout", label: "Checkout" },
-  { href: "/activity", label: "Activity" },
+  { href: "/demo", label: "Demo" },
+  { href: "/console", label: "Console" },
+  { href: "/receipts", label: "Receipts" },
   { href: "/docs", label: "Docs" },
 ];
 
@@ -25,24 +26,25 @@ export function Header() {
     <>
       <header className="topbar">
         <div className="shell">
-          <Link href="/" className="brand">
-            <span className="brand-mark" aria-hidden="true" />
-            <span className="brand-name">Aevum Starter Kit</span>
+          <Link href="/demo" className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              <ShieldCheck {...iconProps} />
+            </span>
+            <span className="brand-name">Payee Guard</span>
           </Link>
           <nav className="nav" aria-label="Main">
-            {links.map((l) => {
-              const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
+            {links.map((link) => {
+              const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
-                <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined}>
-                  {l.label}
+                <Link key={link.href} href={link.href} aria-current={active ? "page" : undefined}>
+                  {link.label}
                 </Link>
               );
             })}
           </nav>
           <div className="topbar-end">
-            <a className="gh-link" href={repoUrl} target="_blank" rel="noreferrer" title="Source code on GitHub">
-              <GitHubIcon />
-              <span>GitHub</span>
+            <a className="gh-link" href={repoUrl} target="_blank" rel="noreferrer">
+              Source
             </a>
             {networks.length > 1 && (
               <div className="net-switch" role="radiogroup" aria-label="Network">
@@ -70,8 +72,7 @@ export function Header() {
         <div className="banner info" role="status">
           <div className="shell">
             <span>
-              Confirm the switch to <strong>{switchingTo.chain.name}</strong> in your wallet. If no window opened, click the wallet icon in your
-              browser toolbar.
+              Confirm the switch to {switchingTo.chain.name} in your wallet. If no window opened, check the wallet icon in your browser toolbar.
             </span>
           </div>
         </div>
@@ -87,9 +88,9 @@ export function Header() {
         <div className="banner" role="alert">
           <div className="shell">
             <span>
-              Your wallet is on another network. This app is set to <strong>{net.chain.name} ({net.chain.id})</strong>.
+              Your wallet is on another network. This console reads chain {net.chain.id}.
             </span>
-            <button type="button" className="btn warn small" onClick={() => select(net.key)}>
+            <button type="button" className="btn small secondary" onClick={() => select(net.key)}>
               Switch network
             </button>
           </div>
