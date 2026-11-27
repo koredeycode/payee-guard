@@ -9,6 +9,7 @@ import {
   isHex,
   keccak256,
   parseUnits,
+  toEventSelector,
   toHex,
   type Abi,
   type Account,
@@ -29,7 +30,7 @@ import {
   txUrl,
   TUSD8_ADDRESS,
 } from "../packages/aevum/src/index.ts";
-import { paymentRejectedEvent, paymentSentEvent, tokenMintAbi } from "./abi.ts";
+import { intentProposedEvent, paymentRejectedEvent, paymentSentEvent, reasonLabel, tokenMintAbi } from "./abi.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Environment                                                                */
@@ -358,7 +359,7 @@ export function decodeOutcome(receipt: TransactionReceipt, guard: Address): Paym
         const args = decoded.args as Record<string, unknown>;
         return {
           event,
-          reason: event === "PaymentRejected" ? String(args.reason ?? "") : "accepted",
+          reason: event === "PaymentRejected" ? reasonLabel(String(args.reason ?? "")) : "accepted",
           args,
           log,
         };
@@ -368,6 +369,21 @@ export function decodeOutcome(receipt: TransactionReceipt, guard: Address): Paym
     }
   }
   return undefined;
+}
+
+/**
+ * `proposeIntent` returns `bytes32` only as a call return value, so the id must be
+ * read from the `IntentProposed` log in its receipt. The indexed intentId is topics[1].
+ */
+export function intentIdFromReceipt(receipt: TransactionReceipt, guard: Address): Hex {
+  const topic = toEventSelector(intentProposedEvent).toLowerCase();
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== guard.toLowerCase()) continue;
+    if (log.topics[0]?.toLowerCase() !== topic) continue;
+    const intentId = log.topics[1];
+    if (intentId) return intentId;
+  }
+  throw new Error("No IntentProposed event in the proposal receipt; cannot find the intentId.");
 }
 
 export function explorerUrl(hash: Hex, network: Mode, rpcUrl: string): string {

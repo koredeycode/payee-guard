@@ -1,6 +1,6 @@
 import { decodeEventLog, type AbiEvent, type Hex } from "viem";
 import { getLogsChunked, MAX_LOG_RANGE } from "../packages/aevum/src/index.ts";
-import { paymentRejectedEvent, paymentSentEvent } from "./abi.ts";
+import { paymentRejectedEvent, paymentSentEvent, reasonLabel } from "./abi.ts";
 import { connect, dryRun, env, explorerUrl, printTable, requiredAddress, shortHash } from "./shared.ts";
 
 interface Row {
@@ -62,8 +62,8 @@ export async function runReadEvents(): Promise<void> {
         agentId: bigintArg(args.agentId),
         payee: addressArg(args.payee),
         amount: bigintArg(args.amount),
-        intentId: addressArg(args.intentId),
-        reason: name === "PaymentRejected" ? String(args.reason ?? "") : "accepted",
+        intentId: typeof args.intentId === "string" ? shortHash(args.intentId) : "-",
+        reason: name === "PaymentRejected" ? reasonLabel(String(args.reason ?? "")) : "accepted",
         explorer: explorerUrl(hash, ctx.mode, ctx.rpcUrl),
       });
     }

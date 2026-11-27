@@ -17,7 +17,7 @@ AMOUNT      ?= 100
 # `make fork` runs under its own chain ID so wallets and signatures never mix it up with the real testnet.
 FORK_CHAIN  := 440050
 
-.PHONY: help install build test test-fork check anvil fork deploy-local deploy-fork deploy-aevum mint deal dev demo verify docker-demo logs
+.PHONY: help install build test test-fork check check-shanghai anvil fork deploy-local deploy-fork deploy-aevum mint deal dev demo verify docker-demo logs
 
 help: ## Show this list
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36mmake %-14s\033[0m %s\n", $$1, $$2}'
@@ -28,6 +28,9 @@ install: ## Fetch Solidity libs and JS packages
 
 build: ## Compile contracts and check they are Shanghai-safe
 	cd contracts && forge build
+	node tools/check-shanghai.mjs contracts/out
+
+check-shanghai: ## Check compiled contracts for Aevum-unsupported opcodes
 	node tools/check-shanghai.mjs contracts/out
 
 test: ## Unit tests (local, no network)
