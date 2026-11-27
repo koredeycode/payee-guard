@@ -1,18 +1,20 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { keccak256, parseUnits, stringToHex, isAddress, type Address, type Hex } from "viem";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { encodeAbiParameters, isAddress, keccak256, parseAbiParameters, parseUnits, type Address, type Hex } from "viem";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { AlertTriangle, Check, CircleAlert, Pause, Play, RotateCw, Trash2, X } from "lucide-react";
 import { iconProps } from "@/components/Icons";
 import { demoSessions, knownPayees, pendingIntents, type DemoSession, type PendingIntent } from "@/data/scenarios";
 import { explain } from "@/lib/errors";
 import { GUARD_CHAIN_ID, guardAddress, guardDemoMode, payeeGuardAbi, TUSD8_DECIMALS } from "@/lib/guard";
+import { metadataHash as computeMetadataHash, nameHash as computeNameHash, type MetadataRecord } from "@/lib/hashes";
 import { reasonCodes, reasonExplanations } from "@/lib/reasonCodes";
 import { skeleton } from "@/lib/confusables";
 import { short } from "@/lib/order";
 
 type Tone = "info" | "good" | "bad";
+type SessionAction = "create" | "recreate" | "revoke";
 
 interface Notice {
   tone: Tone;
@@ -20,6 +22,14 @@ interface Notice {
 }
 
 const noticeIcons = { info: CircleAlert, good: Check, bad: X };
+
+const DEFAULT_METADATA = `{
+  "type": "agent",
+  "name": "Northwind Freight Ltd",
+  "active": true,
+  "services": [{ "type": "payee", "id": "northwind-freight" }],
+  "registrations": [{ "agentId": "1", "chainId": 44005 }]
+}`;
 
 function editDistance(a: string, b: string): number {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -32,8 +42,14 @@ function editDistance(a: string, b: string): number {
   return dp[a.length][b.length];
 }
 
+function toUnixSeconds(value: string): bigint | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? BigInt(Math.floor(ms / 1000)) : null;
+}
+
 export function ConsoleView() {
-  const { address, chainId, isConnected } = useAccount();
+  const { chainId, isConnected } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
   const { data: pausedOnChain } = useReadContract({
     address: guardAddress,
@@ -45,26 +61,77 @@ export function ConsoleView() {
 
   const [notice, setNotice] = useState<Notice | null>(null);
   const [payeeName, setPayeeName] = useState("");
+  const [agentId, setAgentId] = useState("1");
   const [payeeAddress, setPayeeAddress] = useState("");
-  const [payeeDomain, setPayeeDomain] = useState("");
+  const [metadataJson, setMetadataJson] = useState(DEFAULT_METADATA);
   const [confirmation, setConfirmation] = useState("");
   const [allowlisted, setAllowlisted] = useState<string[]>([]);
-  const [agentId, setAgentId] = useState("");
-  const [agentWallet, setAgentWallet] = useState("");
-  const [perPaymentCap, setPerPaymentCap] = useState("1.00");
-  const [totalCap, setTotalCap] = useState("12.00");
-  const [expiryDays, setExpiryDays] = useState("30");
+  const [operator, setOperator] = useState("");
+  const [maxPerPayment, setMaxPerPayment] = useState("1.00");
+  const [maxCumulative, setMaxCumulative] = useState("12.00");
+  const [autoApproveLimit, setAutoApproveLimit] = useState("0.25");
+  const [validAfter, setValidAfter] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [sessions, setSessions] = useState<DemoSession[]>(demoSessions);
   const [intents, setIntents] = useState<PendingIntent[]>(pendingIntents);
   const [pausedLocal, setPausedLocal] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("10.00");
   const [withdrawTo, setWithdrawTo] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("0.50");
 
+  // Start and end of a demo session window, set after mount so the server and client agree.
+  useEffect(() => {
+    const asInput = (date: Date) => date.toISOString().slice(0, 16);
+    const now = new Date();
+    setValidAfter(asInput(now));
+    setExpiresAt(asInput(new Date(now.getTime() + 30 * 86400000)));
+  }, []);
+
+  const agentIdBig = useMemo(() => (/^\d+$/.test(agentId.trim()) ? BigInt(agentId.trim()) : null), [agentId]);
+  const payeeWallet = useMemo(
+    () => (isAddress(payeeAddress.trim()) ? (payeeAddress.trim() as Address) : null),
+    [payeeAddress],
+  );
+  const operatorAddress = useMemo(
+    () => (isAddress(operator.trim()) ? (operator.trim() as Address) : null),
+    [operator],
+  );
+  const withdrawAddress = useMemo(
+    () => (isAddress(withdrawTo.trim()) ? (withdrawTo.trim() as Address) : null),
+    [withdrawTo],
+  );
+
   const paused = guardDemoMode ? pausedLocal : Boolean(pausedOnChain);
-  const nameHash = payeeName.trim() ? keccak256(stringToHex(payeeName.trim())) : null;
-  const metadataHash = payeeName.trim()
-    ? keccak256(stringToHex(`${payeeName.trim()}|${payeeAddress.trim()}|${payeeDomain.trim()}`))
-    : null;
+  const allowlistNameHash = payeeName.trim() ? computeNameHash(payeeName) : null;
+  const parsedMetadata = useMemo<MetadataRecord | null>(() => {
+    try {
+      const value: unknown = JSON.parse(metadataJson);
+      return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as MetadataRecord) : null;
+    } catch {
+      return null;
+    }
+  }, [metadataJson]);
+  const allowlistMetadataHash = parsedMetadata ? computeMetadataHash(parsedMetadata) : null;
+
+  // sessionKey(agentId, operator) is keccak256(abi.encode(agentId, operator)). When a contract
+  // address is configured, prefer the on-chain view over the local calculation.
+  const localSessionKey = useMemo(
+    () =>
+      agentIdBig && operatorAddress
+        ? keccak256(encodeAbiParameters(parseAbiParameters("uint256, address"), [agentIdBig, operatorAddress]))
+        : null,
+    [agentIdBig, operatorAddress],
+  );
+  const { data: sessionKeyOnChain } = useReadContract({
+    address: guardAddress,
+    abi: payeeGuardAbi,
+    functionName: "sessionKey",
+    args: agentIdBig && operatorAddress ? [agentIdBig, operatorAddress] : undefined,
+    chainId: GUARD_CHAIN_ID,
+    query: { enabled: Boolean(guardAddress) && Boolean(agentIdBig && operatorAddress) },
+  });
+  const sessionKey = sessionKeyOnChain ?? localSessionKey;
+
   const folded = skeleton(payeeName);
   const lookalikes = folded
     ? knownPayees.filter((known) => known !== payeeName.trim() && editDistance(folded, skeleton(known)) <= 1)
@@ -105,47 +172,61 @@ export function ConsoleView() {
 
   function submitAllowlist(event: FormEvent) {
     event.preventDefault();
-    if (!payeeName.trim() || !isAddress(payeeAddress.trim()) || !nameHash || !metadataHash) {
-      say("bad", "Enter a name, a valid payee address and a domain.");
+    if (!agentIdBig || !payeeWallet || !allowlistNameHash || !allowlistMetadataHash) {
+      say("bad", "Enter a numeric agent id, a valid payee wallet and metadata JSON with stable fields.");
       return;
     }
     if (needsConfirmation && !confirmed) {
-      say("bad", "Type Confirm lookalike to allow an allowlist write for a confusable name.");
+      say("bad", "Type Confirm lookalike to allow a payee whose name folds to an existing one.");
       return;
     }
     setAllowlisted((current) => [...current, payeeName.trim()]);
     void send(
-      `Payee ${payeeName.trim()} allowlisted`,
+      `Payee ${payeeName.trim()} allowed for agent ${agentIdBig}`,
       () =>
         writeContractAsync({
           address: guardAddress!,
           abi: payeeGuardAbi,
-          functionName: "allowlistPayee",
-          args: [payeeName.trim(), payeeAddress.trim() as Address, payeeDomain.trim(), nameHash, metadataHash],
+          functionName: "allowPayee",
+          args: [agentIdBig, payeeWallet, allowlistNameHash, allowlistMetadataHash],
         }),
     );
     if (guardDemoMode) setConfirmation("");
   }
 
-  function submitSession(action: "create" | "rotate" | "revoke") {
-    if (!agentId.trim()) {
-      say("bad", "Enter an agent id first.");
+  function revokePayee() {
+    if (!agentIdBig) {
+      say("bad", "Enter a numeric agent id first.");
       return;
     }
-    if (action === "create" && !isAddress(agentWallet.trim())) {
-      say("bad", "Enter a valid session wallet address.");
-      return;
-    }
-    if (action !== "revoke" && !isAddress(agentWallet.trim())) {
-      say("bad", "Enter a valid replacement wallet address.");
+    void send(
+      `Payee for agent ${agentIdBig} revoked`,
+      () => writeContractAsync({ address: guardAddress!, abi: payeeGuardAbi, functionName: "revokePayee", args: [agentIdBig] }),
+    );
+  }
+
+  function submitSession(action: SessionAction) {
+    if (!agentIdBig || !operatorAddress) {
+      say("bad", "Enter a numeric agent id and an operator address.");
       return;
     }
 
-    let caps: [bigint, bigint, bigint] | null = null;
-    if (action === "create") {
+    let caps: [bigint, bigint, bigint, bigint, bigint] | null = null;
+    if (action !== "revoke") {
       try {
-        const expiresAt = BigInt(Math.floor(Date.now() / 1000) + Math.max(1, Number(expiryDays) || 30) * 86400);
-        caps = [parseUnits(perPaymentCap, TUSD8_DECIMALS), parseUnits(totalCap, TUSD8_DECIMALS), expiresAt];
+        const validAfterBig = toUnixSeconds(validAfter);
+        const expiresAtBig = toUnixSeconds(expiresAt);
+        if (validAfterBig === null || expiresAtBig === null || validAfterBig >= expiresAtBig) {
+          say("bad", "The session must start before it expires.");
+          return;
+        }
+        caps = [
+          parseUnits(maxPerPayment, TUSD8_DECIMALS),
+          parseUnits(maxCumulative, TUSD8_DECIMALS),
+          parseUnits(autoApproveLimit, TUSD8_DECIMALS),
+          validAfterBig,
+          expiresAtBig,
+        ];
       } catch {
         say("bad", "Caps must be amounts with at most six decimal places.");
         return;
@@ -154,15 +235,16 @@ export function ConsoleView() {
 
     if (guardDemoMode) {
       setSessions((current) => {
-        if (action === "revoke") return current.map((item) => (item.agentId === agentId.trim() ? { ...item, status: "revoked" } : item));
-        if (action === "rotate") return current.map((item) => (item.agentId === agentId.trim() ? { ...item, wallet: short(agentWallet.trim(), 6, 4) } : item));
+        if (action === "revoke") {
+          return current.map((item) => (item.agentId === agentId.trim() ? { ...item, status: "revoked" } : item));
+        }
         return [
           ...current.filter((item) => item.agentId !== agentId.trim()),
           {
             agentId: agentId.trim(),
-            wallet: short(agentWallet.trim(), 6, 4),
-            perPaymentCap,
-            totalCap,
+            wallet: short(operator, 6, 4),
+            perPaymentCap: maxPerPayment,
+            totalCap: maxCumulative,
             spent: "0.00",
             status: "active",
           },
@@ -170,28 +252,25 @@ export function ConsoleView() {
       });
     }
 
-    const label = action === "create" ? `Session ${agentId.trim()} created` : action === "rotate" ? `Session ${agentId.trim()} rotated` : `Session ${agentId.trim()} revoked`;
+    const label =
+      action === "revoke"
+        ? `Session ${short(sessionKey ?? "", 8, 6)} revoked`
+        : action === "recreate"
+          ? `Session ${short(sessionKey ?? "", 8, 6)} recreated at a new epoch`
+          : `Session ${short(sessionKey ?? "", 8, 6)} created`;
+
     void send(
       label,
-      async () => {
-        if (action === "create" && caps) {
-          return writeContractAsync({
-            address: guardAddress!,
-            abi: payeeGuardAbi,
-            functionName: "createSession",
-            args: [agentId.trim(), agentWallet.trim() as Address, caps[0], caps[1], caps[2]],
-          });
-        }
-        if (action === "rotate") {
-          return writeContractAsync({
-            address: guardAddress!,
-            abi: payeeGuardAbi,
-            functionName: "rotateSession",
-            args: [agentId.trim(), agentWallet.trim() as Address],
-          });
-        }
-        return writeContractAsync({ address: guardAddress!, abi: payeeGuardAbi, functionName: "revokeSession", args: [agentId.trim()] });
-      },
+      () =>
+        writeContractAsync({
+          address: guardAddress!,
+          abi: payeeGuardAbi,
+          functionName: action === "revoke" ? "revokeSession" : "createSession",
+          args:
+            action === "revoke"
+              ? [agentIdBig, operatorAddress]
+              : [agentIdBig, operatorAddress, caps![0], caps![1], caps![2], caps![3], caps![4]],
+        }),
     );
   }
 
@@ -213,13 +292,28 @@ export function ConsoleView() {
     if (!guardDemoMode) setPausedLocal(!pausedLocal);
     void send(
       paused ? "Payments resumed" : "Payments paused",
-      () => writeContractAsync({ address: guardAddress!, abi: payeeGuardAbi, functionName: "setPaused", args: [!paused] }),
+      () => writeContractAsync({ address: guardAddress!, abi: payeeGuardAbi, functionName: paused ? "unpause" : "pause" }),
+    );
+  }
+
+  function submitDeposit(event: FormEvent) {
+    event.preventDefault();
+    let amount: bigint;
+    try {
+      amount = parseUnits(depositAmount, TUSD8_DECIMALS);
+    } catch {
+      say("bad", "Enter an amount with at most six decimal places.");
+      return;
+    }
+    void send(
+      `Deposit of ${depositAmount} tUSD8 submitted`,
+      () => writeContractAsync({ address: guardAddress!, abi: payeeGuardAbi, functionName: "deposit", args: [amount] }),
     );
   }
 
   function submitWithdraw(event: FormEvent) {
     event.preventDefault();
-    if (!isAddress(withdrawTo.trim())) {
+    if (!withdrawAddress) {
       say("bad", "Enter a valid destination address.");
       return;
     }
@@ -232,7 +326,13 @@ export function ConsoleView() {
     }
     void send(
       `Withdrawal of ${withdrawAmount} tUSD8 submitted`,
-      () => writeContractAsync({ address: guardAddress!, abi: payeeGuardAbi, functionName: "withdraw", args: [withdrawTo.trim() as Address, amount] }),
+      () =>
+        writeContractAsync({
+          address: guardAddress!,
+          abi: payeeGuardAbi,
+          functionName: "withdraw",
+          args: [withdrawAddress, amount],
+        }),
     );
   }
 
@@ -245,7 +345,7 @@ export function ConsoleView() {
           <p className="kicker">Owner actions</p>
           <h1>Owner console</h1>
           <p className="lede">
-            Verify a payee, bound an agent session and decide what a payment intent is allowed to do. Every reason code below is written in plain language.
+            Allow an agent's payee, bound a session and decide what a payment intent is allowed to do. Every reason code below is written in plain language.
           </p>
         </div>
         <p className="mode-note">
@@ -274,29 +374,36 @@ export function ConsoleView() {
         <div className="console-column">
           <section className="card form-card" aria-labelledby="allowlist-heading">
             <h2 id="allowlist-heading">Allowlist a payee</h2>
-            <p className="card-sub">The owner verifies the name once. The contract keeps the two hashes, not the name itself.</p>
+            <p className="card-sub">The owner commits the name and metadata hashes once. The wallet must match the registry's current wallet for this agent id.</p>
             <form onSubmit={submitAllowlist} className="form-stack">
-              <div className="field">
-                <label htmlFor="payee-name">Registered name</label>
-                <input id="payee-name" value={payeeName} onChange={(event) => setPayeeName(event.target.value)} placeholder="Northwind Freight Ltd" autoComplete="off" />
+              <div className="form-row">
+                <div className="field">
+                  <label htmlFor="allow-agent-id">Agent id</label>
+                  <input id="allow-agent-id" className="num mono" inputMode="numeric" value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="1" autoComplete="off" />
+                </div>
+                <div className="field">
+                  <label htmlFor="payee-name">Registered name</label>
+                  <input id="payee-name" value={payeeName} onChange={(event) => setPayeeName(event.target.value)} placeholder="Northwind Freight Ltd" autoComplete="off" />
+                </div>
               </div>
               <div className="field">
                 <label htmlFor="payee-address">Payee wallet</label>
                 <input id="payee-address" className="mono" value={payeeAddress} onChange={(event) => setPayeeAddress(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} />
               </div>
               <div className="field">
-                <label htmlFor="payee-domain">Invoice domain</label>
-                <input id="payee-domain" value={payeeDomain} onChange={(event) => setPayeeDomain(event.target.value)} placeholder="northwindfreight.example" autoComplete="off" />
+                <label htmlFor="payee-metadata">Registry metadata JSON</label>
+                <textarea id="payee-metadata" value={metadataJson} onChange={(event) => setMetadataJson(event.target.value)} spellCheck={false} rows={7} />
+                <p className="field-help">Only type, name, active, services and registrations are hashed. Refresh timestamps are ignored.</p>
               </div>
 
               <dl className="hash-readout">
                 <div>
                   <dt>nameHash</dt>
-                  <dd>{nameHash ? <code>{nameHash}</code> : <span className="empty-value">Enter a name to compute</span>}</dd>
+                  <dd>{allowlistNameHash ? <code>{allowlistNameHash}</code> : <span className="empty-value">Enter a name to compute</span>}</dd>
                 </div>
                 <div>
                   <dt>metadataHash</dt>
-                  <dd>{metadataHash ? <code>{metadataHash}</code> : <span className="empty-value">Enter a name to compute</span>}</dd>
+                  <dd>{allowlistMetadataHash ? <code>{allowlistMetadataHash}</code> : <span className="empty-value">Enter valid metadata JSON</span>}</dd>
                 </div>
               </dl>
 
@@ -306,7 +413,7 @@ export function ConsoleView() {
                   <div>
                     <p className="warning-title">Confusable with an allowlisted payee</p>
                     <p className="warning-detail">
-                      {lookalikes.join(", ")} has the same folded skeleton as this name. Type <strong>Confirm lookalike</strong> before adding it.
+                      {lookalikes.join(", ")} has the same folded skeleton as this name. Type <strong>Confirm lookalike</strong> before allowing it.
                     </p>
                     <div className="field">
                       <label htmlFor="confirm-lookalike">Typed confirmation</label>
@@ -328,7 +435,10 @@ export function ConsoleView() {
 
               <div className="form-actions">
                 <button type="submit" className="btn" disabled={isPending || (needsConfirmation && !confirmed)}>
-                  Add to allowlist
+                  Allow payee
+                </button>
+                <button type="button" className="btn ghost danger" disabled={isPending} onClick={revokePayee}>
+                  Revoke payee
                 </button>
                 {allowlisted.length > 0 && <span className="quiet-meta">{allowlisted.length} added this session</span>}
               </div>
@@ -337,38 +447,54 @@ export function ConsoleView() {
 
           <section className="card form-card" aria-labelledby="session-heading">
             <h2 id="session-heading">Agent sessions</h2>
-            <p className="card-sub">A session gives one agent a wallet, a per-payment cap and a total cap.</p>
+            <p className="card-sub">A session is keyed by agent id and operator. Recreating it advances the epoch and invalidates older intents.</p>
             <div className="form-stack">
               <div className="form-row">
                 <div className="field">
                   <label htmlFor="agent-id">Agent id</label>
-                  <input id="agent-id" className="mono" value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="agent-invoices-01" autoComplete="off" />
+                  <input id="agent-id" className="num mono" inputMode="numeric" value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="1" autoComplete="off" />
                 </div>
                 <div className="field">
-                  <label htmlFor="agent-wallet">Session wallet</label>
-                  <input id="agent-wallet" className="mono" value={agentWallet} onChange={(event) => setAgentWallet(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} />
+                  <label htmlFor="operator">Operator address</label>
+                  <input id="operator" className="mono" value={operator} onChange={(event) => setOperator(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} />
                 </div>
               </div>
               <div className="form-row three">
                 <div className="field">
-                  <label htmlFor="per-cap">Per payment, tUSD8</label>
-                  <input id="per-cap" className="num" inputMode="decimal" value={perPaymentCap} onChange={(event) => setPerPaymentCap(event.target.value)} />
+                  <label htmlFor="per-cap">Max per payment</label>
+                  <input id="per-cap" className="num" inputMode="decimal" value={maxPerPayment} onChange={(event) => setMaxPerPayment(event.target.value)} />
                 </div>
                 <div className="field">
-                  <label htmlFor="total-cap">Total cap, tUSD8</label>
-                  <input id="total-cap" className="num" inputMode="decimal" value={totalCap} onChange={(event) => setTotalCap(event.target.value)} />
+                  <label htmlFor="total-cap">Max cumulative</label>
+                  <input id="total-cap" className="num" inputMode="decimal" value={maxCumulative} onChange={(event) => setMaxCumulative(event.target.value)} />
                 </div>
                 <div className="field">
-                  <label htmlFor="expiry">Expires in days</label>
-                  <input id="expiry" className="num" inputMode="numeric" value={expiryDays} onChange={(event) => setExpiryDays(event.target.value)} />
+                  <label htmlFor="auto-approve">Auto-approve limit</label>
+                  <input id="auto-approve" className="num" inputMode="decimal" value={autoApproveLimit} onChange={(event) => setAutoApproveLimit(event.target.value)} />
                 </div>
               </div>
+              <div className="form-row">
+                <div className="field">
+                  <label htmlFor="valid-after">Valid after</label>
+                  <input id="valid-after" type="datetime-local" value={validAfter} onChange={(event) => setValidAfter(event.target.value)} />
+                </div>
+                <div className="field">
+                  <label htmlFor="expires-at">Expires at</label>
+                  <input id="expires-at" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
+                </div>
+              </div>
+              <dl className="hash-readout">
+                <div>
+                  <dt>sessionKey(agentId, operator)</dt>
+                  <dd>{sessionKey ? <code>{sessionKey}</code> : <span className="empty-value">Enter an agent id and operator</span>}</dd>
+                </div>
+              </dl>
               <div className="form-actions">
                 <button type="button" className="btn" disabled={isPending} onClick={() => submitSession("create")}>
                   Create session
                 </button>
-                <button type="button" className="btn secondary" disabled={isPending} onClick={() => submitSession("rotate")}>
-                  <RotateCw {...iconProps} /> Rotate wallet
+                <button type="button" className="btn secondary" disabled={isPending} onClick={() => submitSession("recreate")}>
+                  <RotateCw {...iconProps} /> Recreate session
                 </button>
                 <button type="button" className="btn ghost danger" disabled={isPending} onClick={() => submitSession("revoke")}>
                   <X {...iconProps} /> Revoke session
@@ -411,7 +537,7 @@ export function ConsoleView() {
 
           <section className="card form-card" aria-labelledby="controls-heading">
             <h2 id="controls-heading">Owner controls</h2>
-            <p className="card-sub">Pause stops every agent at once. Withdraw moves committed funds back to the owner.</p>
+            <p className="card-sub">Fund the vault, pause every agent and withdraw committed funds. Deposits need a tUSD8 approval to the vault first.</p>
             <div className="control-row">
               <div>
                 <span className="control-label">Payments</span>
@@ -420,9 +546,20 @@ export function ConsoleView() {
                 </span>
               </div>
               <button type="button" className="btn secondary" disabled={isPending} onClick={togglePause}>
-                {paused ? <Play {...iconProps} /> : <Pause {...iconProps} />} {paused ? "Resume payments" : "Pause payments"}
+                {paused ? <Play {...iconProps} /> : <Pause {...iconProps} />} {paused ? "Unpause payments" : "Pause payments"}
               </button>
             </div>
+            <form onSubmit={submitDeposit} className="form-stack">
+              <div className="field">
+                <label htmlFor="deposit-amount">Deposit amount, tUSD8</label>
+                <input id="deposit-amount" className="num" inputMode="decimal" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn secondary" disabled={isPending}>
+                  Deposit
+                </button>
+              </div>
+            </form>
             <form onSubmit={submitWithdraw} className="form-stack">
               <div className="form-row">
                 <div className="field">

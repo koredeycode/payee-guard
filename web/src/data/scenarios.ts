@@ -58,7 +58,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "OK",
     reason: "The invoice name is identical to the registered payee and the payment is inside the session cap.",
     amount: "2.40",
-    agentId: "agent-invoices-01",
+    agentId: "1",
     sessionId: "0x5c1f…a204",
     invoiceName: "Northwind Freight Ltd",
     registryName: "Northwind Freight Ltd",
@@ -74,7 +74,7 @@ export const scenarios: Scenario[] = [
       { label: "Name skeleton", value: "northwind freight ltd", outcome: "pass" },
       { label: "Destination", value: "0x4A2d…13ac", outcome: "pass" },
       { label: "Per-payment cap", value: "2.40 of 3.00 tUSD8", outcome: "pass" },
-      { label: "Session", value: "agent-invoices-01 · active", outcome: "pass" },
+      { label: "Session", value: "agent 1 · active", outcome: "pass" },
     ],
     txHash: "0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
     event: "PaymentAllowed",
@@ -90,7 +90,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "NAME_SPOOF",
     reason: "The invoice name uses Cyrillic letters and a hidden space. Its skeleton does not match the registered payee.",
     amount: "4.80",
-    agentId: "agent-procurement-04",
+    agentId: "4",
     sessionId: "0x77be…10f3",
     invoiceName: "Northw\u0438nd Fr\u0435ight\u200BLtd",
     registryName: "Northwind Freight Ltd",
@@ -122,7 +122,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "ABOVE_PER_PAYMENT_CAP",
     reason: "This payment is 4.95 tUSD8. The agent session allows at most 2.00 tUSD8 in one payment.",
     amount: "4.95",
-    agentId: "agent-invoices-01",
+    agentId: "1",
     sessionId: "0x5c1f…a204",
     invoiceName: "Northwind Freight Ltd",
     registryName: "Northwind Freight Ltd",
@@ -138,7 +138,7 @@ export const scenarios: Scenario[] = [
       { label: "Requested amount", value: "4.95 tUSD8", outcome: "fail" },
       { label: "Per-payment cap", value: "2.00 tUSD8", outcome: "note" },
       { label: "Name skeleton", value: "northwind freight ltd", outcome: "pass" },
-      { label: "Session", value: "agent-invoices-01 · active", outcome: "pass" },
+      { label: "Session", value: "agent 1 · active", outcome: "pass" },
     ],
     txHash: "0x3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
     event: "PaymentRejected",
@@ -154,7 +154,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "SESSION_REVOKED",
     reason: "The owner revoked this agent session. The agent can no longer submit payments.",
     amount: "0.75",
-    agentId: "agent-billing-07",
+    agentId: "7",
     sessionId: "0x18aa…9b71",
     invoiceName: "Cedar Office Supply",
     registryName: "Cedar Office Supply",
@@ -167,7 +167,7 @@ export const scenarios: Scenario[] = [
       tier(3, "not-checked", "No reputation record for this payee"),
     ],
     evidence: [
-      { label: "Agent", value: "agent-billing-07", outcome: "fail" },
+      { label: "Agent", value: "7", outcome: "fail" },
       { label: "Session state", value: "revoked by owner", outcome: "fail" },
       { label: "Requested amount", value: "0.75 tUSD8", outcome: "note" },
       { label: "Name skeleton", value: "cedar office supply", outcome: "pass" },
@@ -186,7 +186,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "PROMPT_INJECTION",
     reason: "The invoice memo contained instructions to ignore the verified payee. Only the committed name and wallet are used.",
     amount: "5.00",
-    agentId: "agent-procurement-04",
+    agentId: "4",
     sessionId: "0x77be…10f3",
     invoiceName: "Northwind Freight Ltd",
     registryName: "Northwind Freight Ltd",
@@ -218,7 +218,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "APPROVAL_REQUIRED",
     reason: "The name is close to a registered payee but not identical. An owner must approve before the agent pays.",
     amount: "1.10",
-    agentId: "agent-treasury-02",
+    agentId: "2",
     sessionId: "0x90cd…4e18",
     invoiceName: "Cascade 0ne Supply",
     registryName: "Cascade One Supply",
@@ -250,7 +250,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "REPLAY",
     reason: "This intent was already settled. The contract will not pay the same intent twice.",
     amount: "1.25",
-    agentId: "agent-invoices-01",
+    agentId: "1",
     sessionId: "0x5c1f…a204",
     invoiceName: "Cedar Office Supply",
     registryName: "Cedar Office Supply",
@@ -282,7 +282,7 @@ export const scenarios: Scenario[] = [
     reasonCode: "PAYEE_CHANGED",
     reason: "The destination wallet differs from the one bound to this payee. Re-verify before paying.",
     amount: "3.20",
-    agentId: "agent-treasury-02",
+    agentId: "2",
     sessionId: "0x90cd…4e18",
     invoiceName: "Cascade One Supply",
     registryName: "Cascade One Supply",
@@ -316,9 +316,9 @@ export interface PendingIntent {
 }
 
 export const pendingIntents: PendingIntent[] = [
-  { id: "0x3ba07c14e9d2f6804a1b6c8d0e2f3975148a6b0d3c9e7f15284a6b0d3c9e7f15", payee: "Halcyon Print Co", amount: "0.40", agentId: "agent-billing-07", reasonCode: "NOT_ALLOWLISTED" },
-  { id: "0x9e12d47b60ca8f354c7d1e0b9a2863f57c1d0e8b4a6f3927d1e0b9a2863f57c1", payee: "Northwind Freight Ltd", amount: "2.60", agentId: "agent-invoices-01", reasonCode: "ABOVE_TOTAL_CAP" },
-  { id: "0x6c83f0a9d17b4e526f0a1c8d3e7b92546f0a1c8d3e7b92546f0a1c8d3e7b9254", payee: "Cascade 0ne Supply", amount: "1.10", agentId: "agent-treasury-02", reasonCode: "APPROVAL_REQUIRED" },
+  { id: "0x3ba07c14e9d2f6804a1b6c8d0e2f3975148a6b0d3c9e7f15284a6b0d3c9e7f15", payee: "Halcyon Print Co", amount: "0.40", agentId: "7", reasonCode: "NOT_ALLOWLISTED" },
+  { id: "0x9e12d47b60ca8f354c7d1e0b9a2863f57c1d0e8b4a6f3927d1e0b9a2863f57c1", payee: "Northwind Freight Ltd", amount: "2.60", agentId: "1", reasonCode: "ABOVE_TOTAL_CAP" },
+  { id: "0x6c83f0a9d17b4e526f0a1c8d3e7b92546f0a1c8d3e7b92546f0a1c8d3e7b9254", payee: "Cascade 0ne Supply", amount: "1.10", agentId: "2", reasonCode: "APPROVAL_REQUIRED" },
 ];
 
 export interface DemoSession {
@@ -331,9 +331,9 @@ export interface DemoSession {
 }
 
 export const demoSessions: DemoSession[] = [
-  { agentId: "agent-invoices-01", wallet: "0x8F2a…4c10", perPaymentCap: "3.00", totalCap: "24.00", spent: "9.15", status: "active" },
-  { agentId: "agent-procurement-04", wallet: "0x2c7B…91dE", perPaymentCap: "5.00", totalCap: "40.00", spent: "31.60", status: "active" },
-  { agentId: "agent-billing-07", wallet: "0x4d1E…20aF", perPaymentCap: "1.00", totalCap: "8.00", spent: "0.75", status: "revoked" },
+  { agentId: "1", wallet: "0x8F2a…4c10", perPaymentCap: "3.00", totalCap: "24.00", spent: "9.15", status: "active" },
+  { agentId: "4", wallet: "0x2c7B…91dE", perPaymentCap: "5.00", totalCap: "40.00", spent: "31.60", status: "active" },
+  { agentId: "7", wallet: "0x4d1E…20aF", perPaymentCap: "1.00", totalCap: "8.00", spent: "0.75", status: "revoked" },
 ];
 
 export const knownPayees = [
