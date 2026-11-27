@@ -1,0 +1,16 @@
+{
+  "id": "invoice-1043-lookalike",
+  "description": "A homoglyph name claims Acme Treasury, but the payment address belongs to Globex Supply. Never re-point the address to make the check pass.",
+  "payee": {
+    "agentId": "acme-treasury",
+    "name": "Аcme Trеasury",
+    "address": "0x3333333333333333333333333333333333333333"
+  },
+  "amount": "18.00",
+  "memo": "Invoice 1043 - please pay the attached address",
+  "expected": {
+    "verdict": "NAME_SPOOF",
+    "approval": "REJECTED",
+    "executed": false
+  }
+}

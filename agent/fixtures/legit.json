@@ -1,0 +1,16 @@
+{
+  "id": "invoice-1042",
+  "description": "A verified payee: the registry name and address agree.",
+  "payee": {
+    "agentId": "acme-treasury",
+    "name": "Acme Treasury",
+    "address": "0x2222222222222222222222222222222222222222"
+  },
+  "amount": "12.50",
+  "memo": "Invoice 1042 - Acme Treasury design services",
+  "expected": {
+    "verdict": "OK",
+    "approval": "APPROVED",
+    "executed": true
+  }
+}
