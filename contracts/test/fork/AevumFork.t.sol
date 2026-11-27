@@ -94,7 +94,6 @@ contract AevumForkTest is Test {
         _assertChain();
         address payee = makeAddr("fork-payee");
         address operator = makeAddr("fork-operator");
-        address payer = makeAddr("fork-payer");
 
         IdentityRegistry registry = new IdentityRegistry();
         PayeeGuard guard = new PayeeGuard(TUSD8, address(this));
@@ -109,11 +108,10 @@ contract AevumForkTest is Test {
             agentId, operator, 20e6, 100e6, 5e6, uint64(block.timestamp), uint64(block.timestamp + 1 days)
         );
 
-        deal(address(TUSD8), payer, 10e6); // 10 tUSD8 (6 decimals), fork-only balance write
-        vm.startPrank(payer);
+        // The test contract is the vault owner, so it funds the vault (fork-only balance write).
+        deal(address(TUSD8), address(this), 10e6); // 10 tUSD8 (6 decimals)
         TUSD8.approve(address(guard), 5e6);
         guard.deposit(5e6);
-        vm.stopPrank();
 
         vm.prank(operator);
         bytes32 intentId =

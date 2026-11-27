@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PayeeGuard} from "../src/PayeeGuard.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
@@ -9,27 +10,36 @@ import {MockUSD8} from "../src/mocks/MockUSD8.sol";
 
 /// @notice With no payments in play, vault token balance must equal deposits minus withdrawals.
 contract VaultAccountingHandler {
+    Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
     MockUSD8 public immutable token;
     PayeeGuard public immutable guard;
+    address internal immutable owner;
     uint256 public accounted;
 
-    constructor(MockUSD8 token_, PayeeGuard guard_) {
+    constructor(MockUSD8 token_, PayeeGuard guard_, address owner_) {
         token = token_;
         guard = guard_;
+        owner = owner_;
+        vm.startPrank(owner_);
         token_.approve(address(guard_), type(uint256).max);
+        vm.stopPrank();
     }
 
     function doDeposit(uint256 amount) external {
         uint256 a = _bound(amount, 1, 10e6);
-        token.mint(address(this), a);
+        token.mint(owner, a);
+        vm.startPrank(owner);
         guard.deposit(a);
+        vm.stopPrank();
         accounted += a;
     }
 
     function doWithdraw(uint256 amount) external {
         uint256 a = _bound(amount, 1, 10e6);
         if (a <= token.balanceOf(address(guard))) {
-            guard.withdraw(address(this), a);
+            vm.startPrank(owner);
+            guard.withdrawTo(address(this), a);
+            vm.stopPrank();
             accounted -= a;
         }
     }
@@ -50,7 +60,7 @@ contract VaultAccountingInvariant is Test {
     function setUp() public {
         token = new MockUSD8();
         guard = new PayeeGuard(IERC20(address(token)), owner);
-        handler = new VaultAccountingHandler(token, guard);
+        handler = new VaultAccountingHandler(token, guard, owner);
         targetContract(address(handler));
     }
 
@@ -62,30 +72,44 @@ contract VaultAccountingInvariant is Test {
 /// @notice Session `spent` only ever increases, never exceeds the cumulative cap, and every
 ///         successful payment is backed by a real token balance change.
 contract SpendHandler {
+    Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
     MockUSD8 public immutable token;
     PayeeGuard public immutable guard;
     uint256 public immutable agentId;
     bytes32 public immutable nameHash;
     bytes32 public immutable metaHash;
     bytes32 public immutable key;
+    address internal immutable owner;
 
     uint256 public maxSpentSeen;
     uint256 public payments;
 
-    constructor(MockUSD8 token_, PayeeGuard guard_, uint256 agentId_, bytes32 nameHash_, bytes32 metaHash_) {
+    constructor(
+        MockUSD8 token_,
+        PayeeGuard guard_,
+        uint256 agentId_,
+        bytes32 nameHash_,
+        bytes32 metaHash_,
+        address owner_
+    ) {
         token = token_;
         guard = guard_;
         agentId = agentId_;
         nameHash = nameHash_;
         metaHash = metaHash_;
+        owner = owner_;
         key = guard_.sessionKey(agentId_, address(this));
+        vm.startPrank(owner_);
         token_.approve(address(guard_), type(uint256).max);
+        vm.stopPrank();
     }
 
     function doPay(uint256 seed) external {
         uint256 amount = 1 + (seed % 5e6);
-        token.mint(address(this), amount);
+        token.mint(owner, amount);
+        vm.startPrank(owner);
         guard.deposit(amount);
+        vm.stopPrank();
         bytes32 intentId =
             guard.proposeIntent(agentId, amount, nameHash, metaHash, uint64(block.timestamp + 1000));
         guard.executeIntent(intentId);
@@ -116,7 +140,7 @@ contract SpentMonotonicityInvariant is Test {
         registry.register("ipfs://northwind");
         vm.prank(owner);
         guard.allowPayee(0, payee, NAME, META);
-        handler = new SpendHandler(token, guard, 0, NAME, META);
+        handler = new SpendHandler(token, guard, 0, NAME, META, owner);
         vm.prank(owner);
         guard.createSession(
             0, address(handler), 5e6, CAP, 5e6, uint64(block.timestamp), uint64(block.timestamp + 30 days)

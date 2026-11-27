@@ -165,16 +165,30 @@ contract PayeeGuard is Ownable2Step, ReentrancyGuard, Pausable {
         emit PayeeRevoked(agentId, p.wallet);
     }
 
-    /// @notice Fund the vault with the immutable token. Anyone may deposit.
-    function deposit(uint256 amount) external nonReentrant returns (uint256 balance) {
+    /// @notice Fund the vault with the immutable token. Only the owner may fund it.
+    function deposit(uint256 amount) external onlyOwner nonReentrant returns (uint256 balance) {
         if (amount == 0) revert ZeroAmount();
         token.safeTransferFrom(msg.sender, address(this), amount);
         balance = token.balanceOf(address(this));
         emit Deposited(msg.sender, amount, balance);
     }
 
-    /// @notice Emergency/admin withdrawal. Pausing the vault does not trap the owner's funds.
-    function withdraw(address to, uint256 amount) external onlyOwner nonReentrant returns (uint256 balance) {
+    /// @notice Withdraw to the owner. Pausing the vault does not trap the owner's funds.
+    function withdraw(uint256 amount) external onlyOwner nonReentrant returns (uint256 balance) {
+        return _withdraw(owner(), amount);
+    }
+
+    /// @notice Withdraw to an explicit recipient (owner only).
+    function withdrawTo(address to, uint256 amount)
+        external
+        onlyOwner
+        nonReentrant
+        returns (uint256 balance)
+    {
+        return _withdraw(to, amount);
+    }
+
+    function _withdraw(address to, uint256 amount) private returns (uint256 balance) {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         uint256 available = token.balanceOf(address(this));
@@ -385,8 +399,10 @@ contract PayeeGuard is Ownable2Step, ReentrancyGuard, Pausable {
         if (i.executed) return INTENT_EXECUTED;
         if (block.timestamp > i.expiresAt) return INTENT_EXPIRED;
 
+        // Only the creating session (its operator) at the same epoch, or the owner, may settle.
+        // The recipient(payee) is deliberately NOT authorized to trigger settlement.
         bool ownerCaller = msg.sender == owner();
-        if (!ownerCaller && msg.sender != i.createdBy && msg.sender != i.payee) return NOT_AUTHORIZED;
+        if (!ownerCaller && msg.sender != i.createdBy) return NOT_AUTHORIZED;
         if (!i.approved) return APPROVAL_REQUIRED;
 
         Payee storage p = payees[i.agentId];

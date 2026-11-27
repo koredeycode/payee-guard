@@ -75,8 +75,8 @@ contract PayeeGuardTest is Test {
         guard.allowPayee(AGENT_ID, agentWallet, NAME, META);
         _createSession(MAX_PER, MAX_CUM, AUTO, uint64(block.timestamp), uint64(block.timestamp + WINDOW));
 
-        token.mint(payer, DEPOSIT);
-        vm.startPrank(payer);
+        token.mint(owner, DEPOSIT);
+        vm.startPrank(owner);
         token.approve(address(guard), DEPOSIT);
         guard.deposit(DEPOSIT);
         vm.stopPrank();
@@ -177,16 +177,29 @@ contract PayeeGuardTest is Test {
         guard.executeIntent(id);
         assertEq(token.balanceOf(agentWallet), amount);
 
-        // An owner-created intent executed by the agent is checked with normal session caps.
+        // The owner path skips caps ONLY: revoking the session still blocks the owner.
         nonce = guard.intentNonce();
         vm.prank(owner);
         guard.proposeIntent(AGENT_ID, amount, NAME, META, expiry);
         bytes32 id2 = _computeIntentId(owner, amount, expiry, nonce);
-        // Owner-created intents are payable by the owner or the payee; the payee path still
-        // applies session caps, while the owner path above skipped them.
-        vm.prank(agentWallet);
-        _expectViolation(ABOVE_PER_PAYMENT_CAP);
+        vm.prank(owner);
+        guard.revokeSession(AGENT_ID, agentWallet);
+        vm.prank(owner);
+        _expectViolation(SESSION_REVOKED);
         guard.executeIntent(id2);
+    }
+
+    function test_payeeCannotExecuteIntent() public {
+        bytes32 id = _propose(AUTO);
+        vm.prank(agentWallet);
+        _expectViolation(NOT_AUTHORIZED);
+        guard.executeIntent(id);
+        vm.expectEmit(true, true, false, true, address(guard));
+        emit PayeeGuard.PaymentRejected(id, agentWallet, NOT_AUTHORIZED);
+        vm.prank(agentWallet);
+        assertFalse(guard.tryExecuteIntent(id));
+        assertFalse(guard.intentOf(id).executed);
+        assertEq(token.balanceOf(agentWallet), 0);
     }
 
     // ---------------- every reason code ----------------
@@ -387,7 +400,7 @@ contract PayeeGuardTest is Test {
 
     function test_INSUFFICIENT_BALANCE() public {
         vm.prank(owner);
-        guard.withdraw(owner, DEPOSIT);
+        guard.withdraw(DEPOSIT);
         assertEq(token.balanceOf(address(guard)), 0);
 
         bytes32 id = _propose(AUTO);
@@ -503,23 +516,29 @@ contract PayeeGuardTest is Test {
     }
 
     function test_depositWithdraw_eventsAndAccounting() public {
-        token.mint(payer, 7e6);
-        vm.prank(payer);
+        token.mint(owner, 7e6);
+        vm.prank(owner);
         token.approve(address(guard), 7e6);
         vm.expectEmit(true, false, false, true, address(guard));
-        emit PayeeGuard.Deposited(payer, 7e6, DEPOSIT + 7e6);
-        vm.prank(payer);
+        emit PayeeGuard.Deposited(owner, 7e6, DEPOSIT + 7e6);
+        vm.prank(owner);
         guard.deposit(7e6);
 
         vm.expectEmit(true, false, false, true, address(guard));
         emit PayeeGuard.Withdrawn(owner, 2e6, DEPOSIT + 5e6);
         vm.prank(owner);
-        guard.withdraw(owner, 2e6);
+        guard.withdraw(2e6);
         assertEq(token.balanceOf(address(guard)), DEPOSIT + 5e6);
+
+        vm.expectEmit(true, false, false, true, address(guard));
+        emit PayeeGuard.Withdrawn(payer, 1e6, DEPOSIT + 4e6);
+        vm.prank(owner);
+        guard.withdrawTo(payer, 1e6);
+        assertEq(token.balanceOf(payer), 1e6);
 
         vm.prank(owner);
         _expectViolation(INSUFFICIENT_BALANCE);
-        guard.withdraw(owner, DEPOSIT + 6e6);
+        guard.withdraw(DEPOSIT + 6e6);
     }
 
     function test_onlyOwnerAdminFunctions() public {
@@ -531,7 +550,13 @@ contract PayeeGuardTest is Test {
         guard.pause();
         vm.prank(outsider);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, outsider));
-        guard.withdraw(owner, 1);
+        guard.withdraw(1);
+        vm.prank(outsider);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, outsider));
+        guard.withdrawTo(outsider, 1);
+        vm.prank(outsider);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, outsider));
+        guard.deposit(1);
     }
 
     function test_ownershipIsTwoStep() public {
@@ -637,13 +662,13 @@ contract PayeeGuardTest is Test {
     function testFuzz_depositWithdraw(uint96 depositAmount, uint96 withdrawAmount) public {
         uint256 d = bound(depositAmount, 1, 100e6);
         uint256 w = bound(withdrawAmount, 1, d);
-        token.mint(payer, d);
-        vm.startPrank(payer);
+        token.mint(owner, d);
+        vm.startPrank(owner);
         token.approve(address(guard), d);
         guard.deposit(d);
         vm.stopPrank();
         vm.prank(owner);
-        guard.withdraw(owner, w);
+        guard.withdraw(w);
         assertEq(token.balanceOf(address(guard)), DEPOSIT + d - w);
     }
 
