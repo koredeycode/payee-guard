@@ -17,7 +17,7 @@ AMOUNT      ?= 100
 # `make fork` runs under its own chain ID so wallets and signatures never mix it up with the real testnet.
 FORK_CHAIN  := 440050
 
-.PHONY: help install build test test-fork check anvil fork deploy-local deploy-fork deploy-aevum mint deal dev
+.PHONY: help install build test test-fork check anvil fork deploy-local deploy-fork deploy-aevum mint deal dev demo verify docker-demo logs
 
 help: ## Show this list
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36mmake %-14s\033[0m %s\n", $$1, $$2}'
@@ -81,3 +81,15 @@ deal: ## `make fork` only: give TO AMOUNT tUSD8 and 10 tQDAY for gas
 
 dev: ## Start the web app on http://localhost:3000
 	pnpm dev
+
+demo: ## Run the 8-scenario Payee Guard demo (DRY_RUN=1 for a key-free plan)
+	pnpm demo
+
+verify: ## Verify docs/tx-table.json receipts and events against chain 44005
+	pnpm verify:submission
+
+docker-demo: ## Fork + deploy + seed + demo + web, entirely in Docker
+	docker compose up --build
+
+logs: ## Read guard PaymentSent/PaymentRejected logs in 1000-block chunks
+	pnpm read:events

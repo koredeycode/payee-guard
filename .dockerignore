@@ -1,0 +1,21 @@
+# Install dependencies from the frozen lockfile inside the image.
+node_modules
+**/node_modules
+.pnpm-store
+
+# Local build output and secrets never enter the build context.
+.git
+.gitmodules
+**/.next
+**/out
+contracts/out
+contracts/cache
+contracts/broadcast
+*.tsbuildinfo
+next-env.d.ts
+.env*
+!**/.env.example
+
+# Runtime state from seed / demo.
+scripts/.demo-identities.json
+.DS_Store

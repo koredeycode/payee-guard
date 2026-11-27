@@ -1,0 +1,2 @@
+# Runtime output of `pnpm seed` (agent IDs are re-derived or refreshed on each run).
+.demo-identities.json

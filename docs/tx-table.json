@@ -1,0 +1,7 @@
+{
+  "_note": "No demo run recorded yet. `pnpm demo` writes provisional receipts here (inclusion, not finality); `pnpm verify:submission` checks them on chain 44005.",
+  "chainId": 44005,
+  "network": "live",
+  "generatedAt": "",
+  "entries": []
+}

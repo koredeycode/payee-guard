@@ -1,0 +1,64 @@
+name: payee-guard
+
+# Local reproduction with no faucet: anvil copies Aevum (real tUSD8) under a separate
+# chain ID; the one-shot setup funds accounts by impersonating tUSD8's master minter.
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    command:
+      - anvil
+      - --host
+      - 0.0.0.0
+      - --hardfork
+      - shanghai
+      - --chain-id
+      - "440050"
+      - --port
+      - "8555"
+      - --fork-url
+      - ${AEVUM_RPC:-https://rpc-test.qday.info}
+    ports:
+      - "8555:8555"
+    healthcheck:
+      test: ["CMD-SHELL", "cast chain-id --rpc-url http://127.0.0.1:8555 | grep -q 440050"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  setup:
+    build:
+      context: .
+      target: toolchain
+    depends_on:
+      anvil:
+        condition: service_healthy
+    environment:
+      NETWORK: fork
+      RPC_URL: http://anvil:8555
+      # Deploys from a throwaway impersonated address, seeds 4 ERC-8004 identities,
+      # then runs the 8 demo scenarios. No private keys are needed on a fork.
+      DEPLOY_SCRIPT: ${DEPLOY_SCRIPT:-script/Deploy.s.sol}
+      GUARD_CONTRACT_NAME: ${GUARD_CONTRACT_NAME:-PayeeGuard}
+      REGISTRY_CONTRACT_NAME: ${REGISTRY_CONTRACT_NAME:-IdentityRegistry,ERC8004IdentityRegistry}
+      OWNER_ADDRESS: ${OWNER_ADDRESS:-0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266}
+      AGENT_ADDRESS: ${AGENT_ADDRESS:-0x70997970C51812dc3A010C7d01b50e0d17dc79C8}
+      RUN_DEMO_AFTER_SEED: "1"
+      RECEIPT_TIMEOUT_MS: "120000"
+    command: ["pnpm", "exec", "tsx", "scripts/deploy-and-seed.ts"]
+
+  web:
+    build:
+      context: .
+      target: build
+      args:
+        NEXT_PUBLIC_NETWORKS: ${NEXT_PUBLIC_NETWORKS:-fork,aevum}
+        NEXT_PUBLIC_CHECKOUT_FORK: ${NEXT_PUBLIC_CHECKOUT_FORK:-}
+        NEXT_PUBLIC_CHECKOUT_AEVUM: ${NEXT_PUBLIC_CHECKOUT_AEVUM:-}
+        NEXT_PUBLIC_REPO_URL: https://github.com/koredeycode/payee-guard
+    ports:
+      - "3000:3000"
+    depends_on:
+      anvil:
+        condition: service_healthy
+    command: ["pnpm", "--filter", "web", "start", "--hostname", "0.0.0.0", "--port", "3000"]
