@@ -1,0 +1,10 @@
+{
+  "version": "demo-policy-1",
+  "chainId": 44005,
+  "token": "tUSD8",
+  "tokenDecimals": 6,
+  "requiredTrustTier": "verified",
+  "maxAutoApprove": "25",
+  "requireAllowlist": true,
+  "rejectPromptInjection": true
+}
