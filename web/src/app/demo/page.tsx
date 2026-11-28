@@ -68,7 +68,6 @@ export default function DemoPage() {
                 </span>
               </span>
               <span className="scenario-title">{scenario.title}</span>
-              <span className="scenario-summary">{scenario.summary}</span>
             </button>
           ))}
         </div>
